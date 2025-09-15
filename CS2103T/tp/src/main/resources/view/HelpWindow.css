@@ -1,0 +1,31 @@
+.root {
+    -fx-background-color: derive(#dafaff, 20%);
+}
+
+#copyUserGuideButton #copyReadmeButton {
+    -fx-background-color: #9accff;
+    -fx-text-fill: #124264;
+}
+
+#copyUserGuideButton:hover #copyReadmeButton:hover {
+    -fx-background-color: derive(#1272b6, 20%);
+}
+
+#copyUserGuideButton:armed #copyReadmeButton:armed {
+    -fx-background-color: derive(#124264, 20%);
+}
+
+#helpMessageArea {
+    -fx-background-color: derive(#dafaff, 20%);;
+    -fx-text-fill: #124264;
+    -fx-font-family: Verdana Bold, Helvetica, sans-serif;
+    -fx-font-size: 14px;
+}
+
+#helpMessageArea .content {
+    -fx-background-color: derive(#dafaff, 20%);;
+}
+
+#helpMessageArea:focused .content {
+    -fx-background-color: derive(#dafaff, 20%);
+}

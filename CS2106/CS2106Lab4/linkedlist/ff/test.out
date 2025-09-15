@@ -1,0 +1,79 @@
+
+Allocating 2048 bytes to ptr1
+Status: ALLOCATED Start index: 0 Length: 2048
+Status: FREE Start index: 2048 Length: 63488
+
+Allocating 6144 bytes to ptr2
+Status: ALLOCATED Start index: 0 Length: 2048
+Status: ALLOCATED Start index: 2048 Length: 6144
+Status: FREE Start index: 8192 Length: 57344
+
+Allocating 1024 bytes to ptr3
+Status: ALLOCATED Start index: 0 Length: 2048
+Status: ALLOCATED Start index: 2048 Length: 6144
+Status: ALLOCATED Start index: 8192 Length: 1024
+Status: FREE Start index: 9216 Length: 56320
+
+Freeing ptr2
+Status: ALLOCATED Start index: 0 Length: 2048
+Status: FREE Start index: 2048 Length: 6144
+Status: ALLOCATED Start index: 8192 Length: 1024
+Status: FREE Start index: 9216 Length: 56320
+
+Allocating 2048 bytes to ptr2
+Status: ALLOCATED Start index: 0 Length: 2048
+Status: ALLOCATED Start index: 2048 Length: 2048
+Status: FREE Start index: 4096 Length: 4096
+Status: ALLOCATED Start index: 8192 Length: 1024
+Status: FREE Start index: 9216 Length: 56320
+
+Allocating 4096 bytes to ptr4
+Status: ALLOCATED Start index: 0 Length: 2048
+Status: ALLOCATED Start index: 2048 Length: 2048
+Status: ALLOCATED Start index: 4096 Length: 4096
+Status: ALLOCATED Start index: 8192 Length: 1024
+Status: FREE Start index: 9216 Length: 56320
+
+Freeing ptr2
+Status: ALLOCATED Start index: 0 Length: 2048
+Status: FREE Start index: 2048 Length: 2048
+Status: ALLOCATED Start index: 4096 Length: 4096
+Status: ALLOCATED Start index: 8192 Length: 1024
+Status: FREE Start index: 9216 Length: 56320
+
+Allocating 3072 bytes to ptr5
+Status: ALLOCATED Start index: 0 Length: 2048
+Status: FREE Start index: 2048 Length: 2048
+Status: ALLOCATED Start index: 4096 Length: 4096
+Status: ALLOCATED Start index: 8192 Length: 1024
+Status: ALLOCATED Start index: 9216 Length: 3072
+Status: FREE Start index: 12288 Length: 53248
+
+Freeing ptr1
+Status: FREE Start index: 0 Length: 4096
+Status: ALLOCATED Start index: 4096 Length: 4096
+Status: ALLOCATED Start index: 8192 Length: 1024
+Status: ALLOCATED Start index: 9216 Length: 3072
+Status: FREE Start index: 12288 Length: 53248
+
+Freeing ptr2
+Status: FREE Start index: 0 Length: 4096
+Status: ALLOCATED Start index: 4096 Length: 4096
+Status: ALLOCATED Start index: 8192 Length: 1024
+Status: ALLOCATED Start index: 9216 Length: 3072
+Status: FREE Start index: 12288 Length: 53248
+
+Freeing ptr3
+Status: FREE Start index: 0 Length: 4096
+Status: ALLOCATED Start index: 4096 Length: 4096
+Status: FREE Start index: 8192 Length: 1024
+Status: ALLOCATED Start index: 9216 Length: 3072
+Status: FREE Start index: 12288 Length: 53248
+
+Freeing ptr4
+Status: FREE Start index: 0 Length: 9216
+Status: ALLOCATED Start index: 9216 Length: 3072
+Status: FREE Start index: 12288 Length: 53248
+
+Freeing ptr5
+Status: FREE Start index: 0 Length: 65536

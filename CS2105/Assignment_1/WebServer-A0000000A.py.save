@@ -1,0 +1,121 @@
+import socket
+
+#server_variables
+isConnected = False
+buffer = (b'')
+
+dict_kv = {}
+dict_count = {}
+
+
+def checkBuffer():
+	while True:
+		header_end = buffer.find(b'  ') #two white spaces to show end of buffer
+		if  header_end == -1: #no full packet in buffer
+			return
+
+		header = buffer[:header_end] #this is the header, without 2 ws at end
+
+		rest = buffer[header_end + 2:]
+		#note: this may contain other requests inside, need to trim.
+		#should also contain the content for POST.
+
+		buffer = handleHandler(header, rest) #update to trim buffer
+
+
+def handleHeader(header, rest): #handle request and trim buffer
+	upperCaseHeader = header.upper()
+	if b'GET' in upperCaseHeader:
+		get(header[4:]) #pass path to get
+		return rest
+	if b'DELETE' in upperCaseHeader:
+		delete(header[6:]) #pass path to delete
+		return rest
+	if b'POST' in upperCaseHeader:
+		# Use a regex to find 'content-length' followed by whitespace and then an integer
+    		match = re.search(b'content-length\s+(\d+)', header, re.IGNORECASE)
+
+    		if match:
+        		# If a match is found, return the integer value
+        		conLength = int(match.group(1))  # Extract and convert to integer
+			content = rest[:conLength]
+			post(header.split()[1], content) #pass path and content to post
+			return rest[conLength:]
+		return rest #this may be problematic
+
+
+def get(path):
+	if (b'/key/' in path):
+		findKey = True
+		key = path[5:]  # Get the key after '/key/'
+	elif (b'/counter/' in path):
+		findKey = False
+		key = path[8:]
+        if key not in dict_kv:
+        	server.send(b'404 NotFound  ')    
+        else:
+		if key in dict_count and dict_count[key]>0:
+			dict_count[key] -=1
+			if dict_count[key] ==0:
+				del dict_kv[key]
+				del dict_count[key]
+        	conLength = len(dict_kv[key])
+		countLength = dict_count[key]
+		if findKey:
+        		response = b'200 OK Content-Length  ' + str(conLength).encode() + b'  ' + dict_kv[key]
+		else:
+			response = b'200 OK Content-Length  ' + str(countLength).encode() + b' ' + countLength.toBytes()
+        	server.send(response)  # Send the response back
+
+
+def delete(path):
+	if (b'/key') in path:
+		key = path[5:}
+		if key not in dict_kv:
+			server.send(b'404 NotFound  ')
+		elif k in dict_count and dict_count[k] > 0:
+			server.send(b'405 MethodNotAllowed  ')
+		else:
+			server.send(b'200 OK Content-Length  '  + str(len(dict_kc[key])).encode() + b' ' + dict_key[key])
+	elif (b'/counter/') in path:
+		key = path[8:]
+		if key not in dict_kv:
+			server.send(b'404 NotFound  ')
+		else:
+			del dict_kev[0]
+			i = dict_count[key]
+			del dict_count[key]
+			server.send(b'200 OK Content-Length  ' + str(i).encode() + b' ' + i.toBytes() )
+	
+
+
+
+def start_server(port):
+	server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	server_socket.bind(('0.0.0.0', port))
+
+	server_socket.listen() #start listening for connection
+
+	while True:
+		client_socket, client_address = server.accept() 
+		#note: accept blocks until client connects.
+
+		isConnected = True
+		
+		while isConnected:
+			data = server.recv(100)
+			if not data:
+				isConnected = False
+				break
+			buffer += data
+			checkBuffer()
+		
+		
+
+
+def main(port):
+	start_server(int(port))
+
+if __name__ == "__main__":
+	main(sys.argv[1])
+

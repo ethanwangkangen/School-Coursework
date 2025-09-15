@@ -1,0 +1,65 @@
+
+
+package seedu.address.logic.parser;
+
+import static seedu.address.logic.Messages.MESSAGE_INVALID_COMMAND_FORMAT;
+import static seedu.address.logic.parser.CliSyntax.PREFIX_FILTER_PARAM;
+
+import java.util.stream.Stream;
+
+import seedu.address.logic.commands.FilterCommand;
+import seedu.address.logic.parser.exceptions.ParseException;
+import seedu.address.model.filter.FilterParam;
+
+/**
+ * Parses input arguments and creates a new FilterCommand object
+ */
+public class FilterCommandParser implements Parser<FilterCommand> {
+
+    /**
+     * Parses the given {@code String} of arguments in the context of the SortCommand
+     * and returns a SortCommand object for execution.
+     * @throws ParseException if the user input does not conform the expected format
+     */
+    public FilterCommand parse(String args) throws ParseException {
+        ArgumentMultimap argMultimap =
+                ArgumentTokenizer.tokenize(args, PREFIX_FILTER_PARAM);
+
+        if (!arePrefixesPresent(argMultimap, PREFIX_FILTER_PARAM)
+                || !argMultimap.getPreamble().isEmpty()) {
+            throw new ParseException(String.format(MESSAGE_INVALID_COMMAND_FORMAT, FilterCommand.MESSAGE_USAGE));
+        }
+
+        // Ensure only f/class or f/yearGroup are allowed
+        String filterParam = argMultimap.getValue(PREFIX_FILTER_PARAM).get();
+        if (!filterParam.startsWith("class") && !filterParam.startsWith("yearGroup")) {
+            throw new ParseException(String.format(MESSAGE_INVALID_COMMAND_FORMAT, FilterCommand.MESSAGE_USAGE));
+        }
+
+        // Split the filter parameter into type (f/class or f/yearGroup) and value (e.g., Science1, 2)
+        String[] parts = filterParam.split("\\s+");
+        if (parts.length != 2) {
+            throw new ParseException(String.format(MESSAGE_INVALID_COMMAND_FORMAT, FilterCommand.MESSAGE_USAGE));
+        }
+
+        String filterType = parts[0];  // e.g., f/class or f/yearGroup
+        String filterValue = parts[1]; // e.g., Science1 or 2
+
+        // Parse the filter type into a FilterParam
+        FilterParam filterCommandParam = ParserUtil.parseFilterCommandParam(filterType);
+
+        // Check that filterValue makes sense
+
+        // Return the FilterCommand with both the filter type and value
+        return new FilterCommand(filterCommandParam, filterValue);
+    }
+
+    /**
+     * Returns true if none of the prefixes contains empty {@code Optional} values in the given
+     * {@code ArgumentMultimap}.
+     */
+    private static boolean arePrefixesPresent(ArgumentMultimap argumentMultimap, Prefix... prefixes) {
+        return Stream.of(prefixes).allMatch(prefix -> argumentMultimap.getValue(prefix).isPresent());
+    }
+
+}

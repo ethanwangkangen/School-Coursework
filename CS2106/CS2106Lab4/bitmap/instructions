@@ -1,0 +1,2 @@
+gcc testmap.c bitmap.c -o testmap
+./testmap

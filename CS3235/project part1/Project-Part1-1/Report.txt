@@ -1,0 +1,41 @@
+1. Describe source of vulnerabilities in the original C code
+2. Describe process of translating to Rust, and difficulties
+
+
+C code vulnerabilities.
+
+Out of Bounds Payload:
+
+For each UserStruct within the database, the array for username is only 50 bytes long, defined by 
+#define MAX_NAME_LEN = 50.
+
+When update_username() is called with a new_username char array that has more than 50 bytes, it copies this new_username into the username array through the copy_string() function without checking whether or not it exceeds the 50 byte limit, thus resulting in writing to memory beyond the username array. Since the memory for the UserStruct_t objects are sequential within UserDatabase_t, this eventually results in the password array of another user being written into.
+
+
+Double Free Payload:
+
+In the loop, for 13 times, Alice and Bob are logged in and the database is updated with update_database_daily().
+
+Past the INACTIVITY_THRESHOLD, inactive users are freed through free_user().
+This means free_user() is called on Eve more than once, after the 10th day. There is no check as to whether free() cas was already called on a pointer.
+
+This in turns calls free() on the same region of memory/same pointer.
+
+
+Use After Free Payload:
+
+UserStruct_t pointers for Mallory and Eve freed once after crossing the INACTIVITY_THRESHOLD.
+After that, object for Charlie is added and it is stored at the same region of memory as Mallory was.
+
+Later on, when Mallory tries to update her password through the UserStruct_t pointer, that memory address stored by the pointer is for Charlie. 
+There is no check as to whether or not the UserStruct_t pointer for Mallory was freed, hence it is a user-after-free error and password for Charlie gets updated instead,
+
+*talk about Eve trying to get password?
+Also, the pointers for the users are still stored in the array.
+
+
+
+
+Converting to Rust code.
+
+For each function, 

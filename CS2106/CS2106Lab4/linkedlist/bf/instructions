@@ -1,0 +1,3 @@
+gcc testmalloc.c llist.c mymalloc.c -o testmalloc
+./testmalloc
+

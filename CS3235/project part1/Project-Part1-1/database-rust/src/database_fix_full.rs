@@ -47,8 +47,9 @@ fn init_database() -> Box<UserDatabase> {
 }
 
 fn add_user(db: &mut UserDatabase, user: Box<UserStruct>) {
- // user.user_id = db.count;
-  db.users[db.count as usize] = Some(user);
+  let mut user_mut : Box<UserStruct> = user;
+  user_mut.user_id = db.count;
+  db.users[db.count as usize] = Some(user_mut);
   db.count +=1;
 }
 

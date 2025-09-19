@@ -38,4 +38,23 @@ Also, the pointers for the users are still stored in the array.
 
 Converting to Rust code.
 
-For each function, 
+For each function: for each of the arguments passed into the function, need to consider whether or not the caller of the function wants to retain ownership of the variable.
+If caller of function wants to maintain ownership, then need to pass in a reference.
+If want to modify the reference, make it mutable.
+If caller of function is okay with handing over ownership, then can pass by value instead. 
+Make the variable mutable if we want to then mutate it.
+
+Similar logic applies for the return values of each function. 
+If we want to hand over ownership of the returned object, then we can just return the variable.
+But if not, for example in find_user_by_id, where the UserDatabase continues to have ownership of the users,
+we just return a reference to the variable. Once again, make the reference mutable if we want to modify it.
+
+
+Also had to understand how Option<> and Box<> worked, as well as the associated syntax.
+
+
+
+
+
+
+

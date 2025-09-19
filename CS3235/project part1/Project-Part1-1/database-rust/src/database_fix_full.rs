@@ -26,6 +26,7 @@ pub struct UserDatabase {
 }
 //====================================End of Definitions=======================================
 use std::str;
+use std::cmp::min;
 
 // Helper function.
 // Takes in a mutable reference to an array, and returns a String
@@ -48,9 +49,13 @@ fn init_database() -> Box<UserDatabase> {
 
 fn add_user(db: &mut UserDatabase, user: Box<UserStruct>) {
   let mut user_mut : Box<UserStruct> = user;
-  user_mut.user_id = db.count;
-  db.users[db.count as usize] = Some(user_mut);
-  db.count +=1;
+  if (db.count as usize)< MAX_USERS as usize{
+    
+
+    user_mut.user_id = db.count;
+    db.users[db.count as usize] = Some(user_mut);
+    db.count +=1;
+  }
 }
 
 fn free_user(user : &mut UserStruct){
@@ -84,7 +89,11 @@ fn print_database(db: &UserDatabase) {
 // So pass in a mutable reference to the array.
 fn copy_string(dest : &mut [u8], src : &str, n : usize) {
     let bytes = src.as_bytes();
-    for i in 0..n {
+
+    let max = dest.len() -1;
+    let copyLen = min(n, min(bytes.len(), max));
+
+    for i in 0..copyLen {
         dest[i] = bytes[i];
     }
     dest[n] = 0; //null terminate
@@ -287,8 +296,6 @@ fn main(){
             println!("Mallory wants to login and update her password \n");
             update_password(&mut db, "Mallory", "Malloryiswatchingyou");
             
-            //delete this
-            update_password(&mut db, "Joker", "hellojokerhere");
             println!("Eve wants to get her password => \n");
             if let Some(password) = get_password(&mut db, "Eve") {
                 println!("Eve's password is: {}\n", password);

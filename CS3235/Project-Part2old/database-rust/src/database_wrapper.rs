@@ -25,8 +25,7 @@ pub struct UserDatabaseT {
 }
 
 extern "C" {
-    //fn init_database(dc : *const i32) -> *mut UserDatabaseT;
-    fn init_database() -> *mut UserDatabaseT;
+    fn init_database(dc : *const i32) -> *mut UserDatabaseT;
     fn create_user(
         username: *const c_char,
         email: *const c_char,
@@ -71,29 +70,18 @@ impl UserReference {
     }
 }
 
-// This the main wrapper.
-// Holds a pointer to the UserDatabaseT Struct.
 pub struct DatabaseExtensions {
     db: *mut UserDatabaseT,
 }
 
 impl DatabaseExtensions {
-//    pub fn new(dc : *const i32) -> Self {
-//        let db = unsafe { init_database(dc) };
-//        unsafe{
-//            init_session_manager();
-//        }
-//        DatabaseExtensions { db }
-//    }
-
-    pub fn new() -> Self {
-        let db = unsafe {init_database()};
-        unsafe {
+    pub fn new(dc : *const i32) -> Self {
+        let db = unsafe { init_database(dc) };
+        unsafe{
             init_session_manager();
         }
         DatabaseExtensions { db }
     }
-
     pub fn get_user_password(&self, user: *mut UserStructT) -> String {
         unsafe {
             let password_ptr = get_password(self.db, (*user).username.as_ptr());
@@ -197,13 +185,6 @@ impl DatabaseExtensions {
         }
         user_refs
     }
-
-    pub fn sync_day_to_c(&self, _day_counter : &i32) {
-        unsafe {
-            update_day_counter(_day_counter as *const i32);
-        }
-    }
-
     pub fn increment_day(&self, rust_db: &UserDatabase) {
         unsafe {
             update_database_daily(self.db);
@@ -233,11 +214,7 @@ impl DatabaseExtensions {
     }
 }
 
-//pub fn initialize_enhanced_database(dc : &i32) -> DatabaseExtensions {
-//    let dc_ptr = dc as *const i32;
-//    DatabaseExtensions::new(dc_ptr)
-//}
-
-pub fn initialize_enhanced_database() -> DatabaseExtensions {
-    DatabaseExtensions::new()
+pub fn initialize_enhanced_database(dc : &i32) -> DatabaseExtensions {
+    let dc_ptr = dc as *const i32;
+    DatabaseExtensions::new(dc_ptr)
 }

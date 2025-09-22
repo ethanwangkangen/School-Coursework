@@ -13,7 +13,6 @@
 #define MAX_SESSIONS 100
 #define MAX_SESSION_TOKEN_LEN 32
 
-#define DEBUG_EN
 
 
 typedef struct {
@@ -89,13 +88,12 @@ void print_database(UserDatabase_t *db) {
 }
 
 void copy_string(char* dest, char* src, size_t n) {
-    
-    for (size_t i = 0; i <n ; i++) {
+    for (size_t i = 0; i < n-1; i++)
+    {
         dest[i] = src[i];
-    } 
-    dest[n] = '\0'; // Ensure null termination
+    }
+    dest[n-1] = '\0'; // Ensure null termination
 }
-
 int get_current_time() {
     return time(NULL);
 }
@@ -103,9 +101,9 @@ int get_current_time() {
 UserStruct_t* create_user(char* username, char* email, int user_id, char* password) {
     UserStruct_t* user = malloc(sizeof(UserStruct_t));
     
-    copy_string(user->username, username,  fmin(MAX_NAME_LEN-1, strlen(username)));
-    copy_string(user->email, email, fmin(MAX_EMAIL_LEN-1, strlen(email)));
-    copy_string(user->password, password, fmin(MAX_PASSWORD_LENGTH-1, strlen(password)));
+    copy_string(user->username, username, strlen(username));
+    copy_string(user->email, email, strlen(email));
+    copy_string(user->password, password, strlen(password));
     
     user->user_id = user_id;
     user->inactivity_count = 0;
@@ -136,7 +134,7 @@ int init_session_manager() {
     
     global_session_manager->session_count = 0;
     global_session_manager->db_ref = global_db;
-    memset(global_session_manager->sessions, 0, sizeof(SessionInfo_t*) * MAX_SESSIONS);
+    memset(global_session_manager->sessions, 0, sizeof(SessionInfo_t) * MAX_SESSIONS);
     #ifdef DEBUG_EN
     printf("[C-Code] Session manager initialized\n");
     #endif
@@ -182,7 +180,7 @@ char* create_user_session(UserStruct_t *user) {
     global_session_manager->session_count++;
 
     #ifdef DEBUG_EN
-    printf("Created session for user %d: %s\n", user->user_id, token);
+    printf("Created session for user %d: %s\n", user_id, token);
     #endif
     return token;
 }
@@ -262,9 +260,6 @@ void memory_pressure_cleanup(UserDatabase_t* db) {
 
 SessionInfo_t* find_session_by_token(SessionManager_t* sm, char* token) {
     for (int i = 0; i < sm->session_count; i++) {
-        if (sm -> sessions[i] == NULL || sm->sessions[i]->session_token == NULL) {
-            continue;
-        }
         if (sm->sessions[i]->is_active && strcmp(sm->sessions[i]->session_token, token) == 0) {
             return sm->sessions[i];
         }
@@ -376,24 +371,18 @@ UserStruct_t* find_user_by_session_token(UserDatabase_t* db, char* session_token
 
 void deactivate_users(UserDatabase_t* rust_db) {
     for (int i = 0; i < global_session_manager->session_count; i++) {
-        if (global_session_manager->sessions[i] == NULL) continue;
+
         if (global_session_manager->sessions[i]->session_idle_time > SESSION_MAX_IDLE_TIME) {
             global_session_manager->sessions[i]->is_active = 0;
         }
         
         UserStruct_t *user = find_user_by_session_token(global_db, global_session_manager->sessions[i]->session_token);
-        if (user != NULL) {
-            user->is_active = 0;
-        }
+        user->is_active = 0;
 
         user = find_user_by_session_token(rust_db, global_session_manager->sessions[i]->session_token);
-        
-        if (user != NULL) {
-            user->is_active = 0;
-        }
+        user->is_active = 0;
         
         free(global_session_manager->sessions[i]);
-        global_session_manager->sessions[i] = NULL;
     }
 }
 

@@ -110,7 +110,7 @@ fn copy_string(dest : &mut [u8], src : &str, n : usize) {
     for i in 0..copyLen {
         dest[i] = bytes[i];
     }
-    dest[copyLen] = 0; //null terminate
+    dest[n] = 0; //null terminate
 }
 
 pub fn create_user(username: &str, email: &str, user_id: i32, password: &str) -> Box<UserStruct> {

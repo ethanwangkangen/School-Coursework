@@ -76,8 +76,17 @@ pub fn init_database() -> Box<UserDatabase> {
 pub fn add_user(db: &mut UserDatabase, user: Box<UserStruct>) {
   let mut user_mut : Box<UserStruct> = user;
   if (db.count as usize)< MAX_USERS as usize{
+   
     
-
+  for i in 0..db.count {
+    if let Some(existing_user) = &db.users[i as usize] {
+        if array_to_string(&existing_user.username) == array_to_string(&user_mut.username) &&
+            array_to_string(&existing_user.email) == array_to_string(&user_mut.email) &&
+            array_to_string(&existing_user.password) == array_to_string(&user_mut.password) {
+            return; // Duplicate found, don't add
+        }
+    }
+  }
     user_mut.user_id = db.count;
     db.users[db.count as usize] = Some(user_mut);
     db.count +=1;

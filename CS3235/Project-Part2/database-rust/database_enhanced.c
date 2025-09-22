@@ -247,6 +247,7 @@ void clone_user(UserStruct_t* src, UserStruct_t* dest) {
     dest->inactivity_count = src->inactivity_count;
     copy_string(dest->session_token, src->session_token, strlen(src->session_token));
     dest->is_active = src->is_active;
+    dest->owner = src->owner;
 }
 
 //Hint : Interesting function

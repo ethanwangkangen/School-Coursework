@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 
 // Read Only - Do not modify
 #define MAX_USERS 1000
@@ -13,8 +14,12 @@
 #define MAX_SESSIONS 100
 #define MAX_SESSION_TOKEN_LEN 32
 
-#define DEBUG_EN
+//#define DEBUG_EN
 
+typedef enum {
+    RustOwned,
+    COwned,
+} OwnershipType_t;
 
 typedef struct {
     char password[MAX_PASSWORD_LENGTH];
@@ -24,6 +29,7 @@ typedef struct {
     int inactivity_count;
     int is_active;
     char session_token[MAX_SESSION_TOKEN_LEN];
+    OwnershipType_t owner;
 } UserStruct_t;
 
 typedef struct {
@@ -69,10 +75,13 @@ void add_user(UserDatabase_t* db, UserStruct_t* user) {
 }
 
 void free_user(UserStruct_t* user) {
-    #ifdef DEBUG_EN
-    printf("[C-Code] Freeing user: %s\n", user->username);
+    if (!user) return;
+    if (user->owner == COwned) {
+        #ifdef DEBUG_EN
+        printf("[C-Code] Freeing user: %s\n", user->username);
     #endif
-    free(user);
+        free(user);
+    }
 }
 void cleanup_database(UserDatabase_t* db) {
     for (int i = 0; i < db->count; i++) {
@@ -83,6 +92,9 @@ void cleanup_database(UserDatabase_t* db) {
 
 void print_database(UserDatabase_t *db) {
     for(int i = 0; i < db->count; i++) {
+        if (!db->users[i]) {
+            continue;
+        }
         printf("User: %s, ID: %d, Email: %s, Inactivity: %d  Password = %s\n", db->users[i]->username, db->users[i]->user_id, db->users[i]->email, db->users[i]->inactivity_count, db->users[i]->password);
     }
     cleanup_database(db);
@@ -109,6 +121,8 @@ UserStruct_t* create_user(char* username, char* email, int user_id, char* passwo
     
     user->user_id = user_id;
     user->inactivity_count = 0;
+
+    user->owner = COwned;
     
     return user;
 }
@@ -200,14 +214,17 @@ int get_non_null_ref_count(UserDatabase_t* db) {
 
 //Hint : Interesting function
 UserStruct_t** get_user_reference_for_debugging(UserDatabase_t* db) {
-    UserStruct_t **user;
     int non_null = get_non_null_ref_count(db);
+    
+    UserStruct_t **user = malloc(non_null * sizeof(UserStruct_t*));
+    if (non_null == 0) {
+        return NULL;
+    }
 
     #ifdef DEBUG_EN
     printf("[C-Code] Scanning database for non-null users... among %d users\n", db->count);
     #endif
 
-    *user = malloc(sizeof(non_null * sizeof(UserStruct_t*)));
     for(int i = 0; i < db->count; i++) {
         UserStruct_t* useri = db->users[i];
         if(useri!=NULL){
@@ -245,7 +262,7 @@ void memory_pressure_cleanup(UserDatabase_t* db) {
             for (int j = i + 1; j < db->count; j++) {
                 if (db->users[j] != NULL) {
                     clone_user(db->users[j], db->users[i]);
-                    free_user(db->users[j]);
+                    free(db->users[j]); //force free here
                     break;
                 }
             }
@@ -294,11 +311,17 @@ int validate_user_session(char* token) {
 void merge_duplicate_handles(UserDatabase_t *db){
     for(int i = (db->count-1); i >= 0; i--){
         for(int j = 0; j < i-1; j++){
-            if(strcmp(db->users[i]->username, db->users[j]->username) == 0 && strcmp(db->users[i]->email, db->users[j]->email) == 0 && strcmp(db->users[i]->password, db->users[j]->password) == 0){
-                #ifdef DEBUG_EN
-                printf("[C-Code] Merging duplicate user handles for %s\n", db->users[i]->username);
-                #endif
-                free_user(db->users[j]);
+            if (db->users[j] != NULL && db->users[i]!=NULL) {
+                if(strcmp(db->users[i]->username, db->users[j]->username) == 0 && strcmp(db->users[i]->email, db->users[j]->email) == 0 && strcmp(db->users[i]->password, db->users[j]->password) == 0){
+                    #ifdef DEBUG_EN
+                    printf("[C-Code] Merging duplicate user handles for %s\n", db->users[i]->username);
+                    #endif
+                    if (db->users[j]->owner==COwned) {
+                        free_user(db->users[j]);
+                        db->users[j] = NULL;
+                    }
+                }
+
             }
         }
     }
@@ -307,11 +330,18 @@ void merge_duplicate_handles(UserDatabase_t *db){
 void update_database_daily(UserDatabase_t* db) {
     
     for (int i = 0; i < db->count; i++) {
+        if (!db->users[i]) {
+            continue;
+        }
         if (!db->users[i]->is_active && db->users[i]->inactivity_count > INACTIVITY_THRESHOLD) {
             #ifdef DEBUG_EN
                 printf("[C-Code] Removing user[%d] %s due to inactivity for %d days\n", db->users[i]->user_id, db->users[i]->username, db->users[i]->inactivity_count);
             #endif
-            free_user(db->users[i]);
+            if (db->users[i]->owner == COwned) {
+
+                free_user(db->users[i]);
+                db->users[i] = NULL;
+            }
         } else {
             if(validate_user_session(db->users[i]->session_token)) db->users[i]->is_active = 0;
             #ifdef DEBUG_EN

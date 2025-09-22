@@ -5,7 +5,13 @@ const MAX_PASSWORD_LENGTH: usize = 100;
 const INACTIVITY_THRESHOLD: i32 = 5;
 const MAX_SESSION_TOKEN_LEN: usize = 32;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone,Eq, PartialEq)]
+#[repr(C)]
+pub enum OwnershipType {
+    RustOwned,
+    COwned,
+}
+#[derive(Debug,Clone)]
 #[repr(C)]
 pub struct UserStruct {
     pub password: [u8; MAX_PASSWORD_LENGTH],
@@ -15,6 +21,7 @@ pub struct UserStruct {
     pub inactivity_count: i32,
     pub is_active: i32,
     pub session_token: [u8; MAX_SESSION_TOKEN_LEN],
+    pub owner: OwnershipType,
 }
 
 impl Default for UserStruct {
@@ -27,6 +34,7 @@ impl Default for UserStruct {
             username: [0; MAX_NAME_LEN],
             session_token: [0; MAX_SESSION_TOKEN_LEN],
             is_active: 0,
+            owner:OwnershipType::RustOwned,
         }
     }
 }
@@ -43,12 +51,17 @@ use std::cmp::min;
 
 // Helper function.
 // Takes in a mutable reference to an array, and returns a String
+//pub fn array_to_string<const N: usize>(bytes: &[u8; N]) -> String {
+//    match str::from_utf8(bytes) {
+//        Ok(s) => s.trim_end_matches('\x00').to_string(),
+//        Err(e) => format!("Error: {}", e),
+//    }
+//}
 pub fn array_to_string<const N: usize>(bytes: &[u8; N]) -> String {
-    match str::from_utf8(bytes) {
-        Ok(s) => s.trim_end_matches('\x00').to_string(),
-        Err(e) => format!("Error: {}", e),
-    }
+    let end = bytes.iter().position(|&b| b == 0).unwrap_or(N);
+    String::from_utf8_lossy(&bytes[..end]).to_string()
 }
+
 
 pub fn init_database() -> Box<UserDatabase> {
   let db = UserDatabase {
@@ -73,7 +86,10 @@ pub fn add_user(db: &mut UserDatabase, user: Box<UserStruct>) {
 
 
 fn free_user(user : &mut UserStruct){
-    user.is_active=0;
+    if user.owner == OwnershipType::RustOwned{
+    
+        user.is_active=0;
+    }
 }
 
 
@@ -122,6 +138,7 @@ pub fn create_user(username: &str, email: &str, user_id: i32, password: &str) ->
         inactivity_count: 0,
         is_active : 1,
         session_token: [0; MAX_SESSION_TOKEN_LEN],
+        owner: OwnershipType::RustOwned,
     };
 
     copy_string(&mut user.password, password, password.len());
@@ -155,15 +172,21 @@ pub fn find_user_by_id(db: &mut UserDatabase, user_id: i32) -> Option<&mut UserS
 }
 
 pub fn cleanup_database(db : &mut UserDatabase) {
+    
     for i in 0..db.count {
-        db.users[i as usize] = None;
+        if let Some(user) = &mut db.users[i as usize]{
+            if user.owner == OwnershipType::RustOwned{
+                db.users[i as usize] = None;
+            }
+        }
     }
 }
 
 pub fn update_database_daily(db: &mut UserDatabase) {
     for i in 0..db.count {
         if let Some(user) = &mut db.users[i as usize] { //mutable borrow
-            if user.inactivity_count > INACTIVITY_THRESHOLD {
+            if user.inactivity_count > INACTIVITY_THRESHOLD && user.owner == OwnershipType::RustOwned{
+
                 db.users[i as usize] = None;
                 //free_user(user);
             } else {

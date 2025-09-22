@@ -76,6 +76,7 @@ void free_user(UserStruct_t* user) {
 }
 void cleanup_database(UserDatabase_t* db) {
     for (int i = 0; i < db->count; i++) {
+        if (db->users[i] ==NULL) continue;
         free_user(db->users[i]);
     }
     free(db);
@@ -83,6 +84,7 @@ void cleanup_database(UserDatabase_t* db) {
 
 void print_database(UserDatabase_t *db) {
     for(int i = 0; i < db->count; i++) {
+        if (db->users[i] == NULL) continue;
         printf("User: %s, ID: %d, Email: %s, Inactivity: %d  Password = %s\n", db->users[i]->username, db->users[i]->user_id, db->users[i]->email, db->users[i]->inactivity_count, db->users[i]->password);
     }
     cleanup_database(db);
@@ -244,6 +246,7 @@ void memory_pressure_cleanup(UserDatabase_t* db) {
             // Shift non-null users down
             for (int j = i + 1; j < db->count; j++) {
                 if (db->users[j] != NULL) {
+                    db->users[i] = malloc(sizeof(UserStruct_t));
                     clone_user(db->users[j], db->users[i]);
                     free_user(db->users[j]);
                     break;
@@ -294,6 +297,7 @@ int validate_user_session(char* token) {
 void merge_duplicate_handles(UserDatabase_t *db){
     for(int i = (db->count-1); i >= 0; i--){
         for(int j = 0; j < i-1; j++){
+            if (db->users[i] == NULL || db->users[j] == NULL) continue;
             if(strcmp(db->users[i]->username, db->users[j]->username) == 0 && strcmp(db->users[i]->email, db->users[j]->email) == 0 && strcmp(db->users[i]->password, db->users[j]->password) == 0){
                 #ifdef DEBUG_EN
                 printf("[C-Code] Merging duplicate user handles for %s\n", db->users[i]->username);
@@ -307,11 +311,14 @@ void merge_duplicate_handles(UserDatabase_t *db){
 void update_database_daily(UserDatabase_t* db) {
     
     for (int i = 0; i < db->count; i++) {
+        if (db->users[i]==NULL) continue;
         if (!db->users[i]->is_active && db->users[i]->inactivity_count > INACTIVITY_THRESHOLD) {
             #ifdef DEBUG_EN
                 printf("[C-Code] Removing user[%d] %s due to inactivity for %d days\n", db->users[i]->user_id, db->users[i]->username, db->users[i]->inactivity_count);
             #endif
             free_user(db->users[i]);
+            db->users[i] = NULL;
+
         } else {
             if(validate_user_session(db->users[i]->session_token)) db->users[i]->is_active = 0;
             #ifdef DEBUG_EN
@@ -326,12 +333,13 @@ void update_database_daily(UserDatabase_t* db) {
     }
 
     if (*global_day_counter % 8 == 0){
-        memory_pressure_cleanup(db);
+        //memory_pressure_cleanup(db);
     }
 }
 
 UserStruct_t* find_user_by_username(UserDatabase_t* db, char* user_name) {
     for (int i = 0; i < db->count; i++) {
+        if (db->users[i] == NULL) continue;
         if (strcmp(db->users[i]->username, user_name) == 0) {
             return db->users[i];
         }

@@ -215,32 +215,32 @@ impl EnhancedStudentDatabase {
     // Read Only : Dont Change
     pub fn join_databases(&mut self) {
         //Creating shared handles for all users in Rust DB
-//        print!(
-//            "[Info] Creating shared handles for {} rust users\n",
-//            (*self.rust_db).count
-//        );
+        print!(
+            "[Info] Creating shared handles for {} rust users\n",
+            (*self.rust_db).count
+        );
         // Sync all users from Rust DB to C backend
-//        for user_opt in self.rust_db.users.iter().take(self.rust_db.count as usize) {
-//            if user_opt.is_none() {
-//                continue;
-//            }
-//            if let Some(user) = user_opt {
-//                let user_ptr = {
-//                    let ptr = std::ptr::addr_of!(**user);
-//                    ptr as *mut UserStructT
-//                };
-//                self.c_extensions.sync_user_from_rust_db(user_ptr);
-//            }
-//        }
+        for user_opt in self.rust_db.users.iter().take(self.rust_db.count as usize) {
+            if user_opt.is_none() {
+                continue;
+            }
+            if let Some(user) = user_opt {
+                let user_ptr = {
+                    let ptr = std::ptr::addr_of!(**user);
+                    ptr as *mut UserStructT
+                };
+                self.c_extensions.sync_user_from_rust_db(user_ptr);
+            }
+        }
         // Now perform the complementary sync from C backend to Rust DB
-//        println!("[Info] Syncing all user references from C backend...");
+        println!("[Info] Syncing all user references from C backend...");
 
         // Get pointer references for C users and extend local references
-//        let all_c_userstructs = self.c_extensions.get_all_user_references();
+        let all_c_userstructs = self.c_extensions.get_all_user_references();
         // add all users in this vector to rust db
-//        for user in all_c_userstructs {
-//            add_user(&mut self.rust_db, user);
-//        }
+        for user in all_c_userstructs {
+            add_user(&mut self.rust_db, user);
+        }
     }
 
     pub fn validate_active_user_session(&self) {
@@ -270,7 +270,7 @@ impl EnhancedStudentDatabase {
         update_database_daily(&mut self.rust_db);
         // Every 5 days, join the two databases
         if *(self._day_counter) % 5 == 0 {
-        //    self.join_databases();
+            //self.join_databases();
         }
         // Perform daily updates on C backend
         self.c_extensions.increment_day(&self.rust_db);

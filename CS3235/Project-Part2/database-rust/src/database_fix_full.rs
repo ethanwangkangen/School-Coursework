@@ -1,4 +1,3 @@
-//==========Dont change these definitions==========================
 const MAX_USERS: usize = 100;
 const MAX_NAME_LEN: usize = 50;
 const MAX_EMAIL_LEN: usize = 50;
@@ -7,6 +6,7 @@ const INACTIVITY_THRESHOLD: i32 = 5;
 const MAX_SESSION_TOKEN_LEN: usize = 32;
 
 #[derive(Debug, Clone)]
+#[repr(C)]
 pub struct UserStruct {
     pub password: [u8; MAX_PASSWORD_LENGTH],
     pub username: [u8; MAX_NAME_LEN],
@@ -17,6 +17,19 @@ pub struct UserStruct {
     pub session_token: [u8; MAX_SESSION_TOKEN_LEN],
 }
 
+impl Default for UserStruct {
+    fn default() -> Self {
+        UserStruct {
+            password: [0; MAX_PASSWORD_LENGTH],
+            user_id: 0,
+            email: [0; MAX_EMAIL_LEN],
+            inactivity_count: 0,
+            username: [0; MAX_NAME_LEN],
+            session_token: [0; MAX_SESSION_TOKEN_LEN],
+            is_active: 0,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct UserDatabase {
@@ -24,8 +37,9 @@ pub struct UserDatabase {
     pub count: i32,
     pub capacity: i32,
 }
-//====================================End of Definitions=======================================
+
 use std::str;
+use std::cmp::min;
 
 // Helper function.
 // Takes in a mutable reference to an array, and returns a String
@@ -36,7 +50,7 @@ pub fn array_to_string<const N: usize>(bytes: &[u8; N]) -> String {
     }
 }
 
-fn init_database() -> Box<UserDatabase> {
+pub fn init_database() -> Box<UserDatabase> {
   let db = UserDatabase {
     users: std::array::from_fn(|_| None),
     count: 0,
@@ -46,23 +60,25 @@ fn init_database() -> Box<UserDatabase> {
   Box::new(db)
 }
 
-// db: Want caller to keep ownership of UserDatabase, but want to mutate. 
-// so pass in mutable reference.
-//
-fn add_user(db: &mut UserDatabase, user: Box<UserStruct>) {
- // user.user_id = db.count;
-  db.users[db.count as usize] = Some(user);
-  db.count +=1;
+pub fn add_user(db: &mut UserDatabase, user: Box<UserStruct>) {
+  let mut user_mut : Box<UserStruct> = user;
+  if (db.count as usize)< MAX_USERS as usize{
+    
+
+    user_mut.user_id = db.count;
+    db.users[db.count as usize] = Some(user_mut);
+    db.count +=1;
+  }
 }
 
-// KIV
+
 fn free_user(user : &mut UserStruct){
+    user.is_active=0;
 }
 
-// db: Only want to print UserDatabase. 
-// so pass in immutable reference.
-fn print_database(db: &UserDatabase) {
-  for i in 0..db.count {
+
+pub fn print_database(db: &UserDatabase) {
+ for i in 0..db.count {
     // 'if let' is a pattern matching expression
     //
     // Here, it tries to match &db.users[i] (a reference to an Option<Box<UserStruct>>)
@@ -84,18 +100,20 @@ fn print_database(db: &UserDatabase) {
   }
 }
 
-// dest: Want to copy values from src into array, but caller keeps ownership of array.
-// So pass in a mutable reference to the array.
+
 fn copy_string(dest : &mut [u8], src : &str, n : usize) {
     let bytes = src.as_bytes();
-    for i in 0..n {
+
+    let max = dest.len() -1;
+    let copyLen = min(n, min(bytes.len(), max));
+
+    for i in 0..copyLen {
         dest[i] = bytes[i];
     }
     dest[n] = 0; //null terminate
 }
 
-// Returns UserStruct, caller takes ownership of UserStruct.
-fn create_user(username : &str, email : &str, user_id : i32, password : &str) -> Box<UserStruct> {
+pub fn create_user(username: &str, email: &str, user_id: i32, password: &str) -> Box<UserStruct> {
     let mut user = UserStruct {
         password: [0; MAX_PASSWORD_LENGTH],
         username: [0; MAX_NAME_LEN],
@@ -112,23 +130,7 @@ fn create_user(username : &str, email : &str, user_id : i32, password : &str) ->
     Box::new(user) // Return the user
 }
 
-//fn find_user_by_id( db : &mut UserDatabase , user_id : i32) -> Option<&mut UserStruct> {
-//    for i in 0..db.count {
-//        if let Some(user) = db.users[i as usize].as_mut() { 
-//            if user.user_id == user_id {
-//                return Some(&mut **user);
-//            }
-//        }
-//    }
-//    return None;
-//}
-
-
-// db: Mutable reference
-//
-// Return Option<&mut UserStruct>: Want database to maintain ownership of UserStruct,
-// so pass a mutable reference. Wrap in Option<> since can return Some or None
-fn find_user_by_id(db: &mut UserDatabase, user_id: i32) -> Option<&mut UserStruct> {
+pub fn find_user_by_id(db: &mut UserDatabase, user_id: i32) -> Option<&mut UserStruct> {
     // .iter_mut() to bypass multiple borrowing issues when iterating via for i in 0..db.count
     for user_option in db.users.iter_mut() {
         // db.users is [Option<Box<UserStruct>>; MAX_USERS]
@@ -152,11 +154,13 @@ fn find_user_by_id(db: &mut UserDatabase, user_id: i32) -> Option<&mut UserStruc
     None
 }
 
-
-fn cleanup_database() {
+pub fn cleanup_database(db : &mut UserDatabase) {
+    for i in 0..db.count {
+        db.users[i as usize] = None;
+    }
 }
 
-fn update_database_daily(db : &mut UserDatabase) {
+pub fn update_database_daily(db: &mut UserDatabase) {
     for i in 0..db.count {
         if let Some(user) = &mut db.users[i as usize] { //mutable borrow
             if user.inactivity_count > INACTIVITY_THRESHOLD {
@@ -169,7 +173,7 @@ fn update_database_daily(db : &mut UserDatabase) {
     }
 }
 
-fn update_username (db: &mut UserDatabase, username : &str, new_username : &str) {
+pub fn update_username (db: &mut UserDatabase, username : &str, new_username : &str) {
     if let Some(user) = find_user_by_username(db, username) {
         // user is &mut UserStruct
 
@@ -182,17 +186,14 @@ fn update_username (db: &mut UserDatabase, username : &str, new_username : &str)
     }
 }
 
-fn user_login (db: &mut UserDatabase, username : &str) {
+pub fn user_login(db: &mut UserDatabase, username: &str) {
     if let Some(user) = find_user_by_username(db, username) {
         //user is &mut UserStruct
         user.inactivity_count = 0;
     }
 }
 
-// Cannot return an Option<&[u8]>.
-// Cannot return a mutable reference into the user struct, since the user's reference is also
-// borrowed
-fn get_password(db : &mut UserDatabase, username: &str) -> Option<String> {
+pub fn get_password(db : &mut UserDatabase, username: &str) -> Option<String> {
     if let Some(user) = find_user_by_username(db, username) {
         //user is &mut UserStruct
         Some(array_to_string(&user.password))
@@ -200,7 +201,6 @@ fn get_password(db : &mut UserDatabase, username: &str) -> Option<String> {
         None
     }
 }
-
 
 fn update_password(db : &mut UserDatabase, username: &str , password: &str) {
     if let Some(user) = find_user_by_username(db, username) {
@@ -223,7 +223,7 @@ fn print_user(db : &mut UserDatabase, username : &str) {
 
 }
 
-fn find_user_by_username<'a> (db: &'a mut UserDatabase, username : &str) -> Option<&'a mut UserStruct> {
+pub fn find_user_by_username<'a>(db: & 'a UserDatabase, username: &'a str) -> Option<&'a UserStruct> {
     for user_option in db.users.iter_mut() {
         if let Some(user) = user_option{
         
@@ -237,77 +237,13 @@ fn find_user_by_username<'a> (db: &'a mut UserDatabase, username : &str) -> Opti
     } None
 }
 
-
-fn main(){
-    let args: Vec<String> = std::env::args().collect();
-    // args[0] is program name, args[1] is first argument...
-    
-    if args.len() <2 {
-        println!("Usage: {} <payload_type>\n 0. OUT_OF_BOUNDS_PAYLOAD\n 1. DOUBLE_FREE_PAYLOAD\n 2. USE_AFTER_FREE_PAYLOAD", args[0]);
-        std::process::exit(1);
-    }
-
-    let iter: u32 = args[1].parse().expect("Error"); // parse converts string to int
-
-    let mut db : Box<UserDatabase> = init_database();
-
-    let mallory : Box<UserStruct> = create_user("Mallory", "mallory@nus.edu.sg", 0, "malloryisnotevil");
-    add_user(&mut db, mallory);
-    let alice : Box<UserStruct> = create_user("Alice", "alice@nus.edu.sg", 1, "aliceinthewonderland");
-    add_user(&mut db, alice);
-    let bob : Box<UserStruct> = create_user("Bob", "bob@nus.edu.sg", 2, "bobthebuilder");
-    add_user(&mut db, bob);
-    let eve : Box<UserStruct> = create_user("Eve", "eve@nus.edu.sg", 3, "eve4ever");
-    add_user(&mut db, eve);
-
-    match iter {
-        0 => {
-            //&mut UserDatabase, username : &str, new_username : &str
-            update_username(&mut db, "Mallory", "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC");
-        },
-        1 => {
-            for i in 0..=INACTIVITY_THRESHOLD+2 {
-                println!("----------------------Day {}: User login and database update-----------------------\n", i + 1);
-                user_login(&mut db, "Alice");
-                user_login(&mut db, "Bob");
-                update_database_daily(&mut db);
-                println!("\n");
-            }
-        },
-        2 => {
-            println!("--------------Starting a sprint of the database update and user login-------------\n");
-            for i in 0..=INACTIVITY_THRESHOLD+1 {
-                user_login(&mut db, "Alice");
-                user_login(&mut db, "Bob");
-                update_database_daily(&mut db);
-            }
-
-            println!("--------------Database update and user login sprint finished----------------------\n");
-            let charlie : Box<UserStruct> = create_user("Charlie", "charlie@nus.edu.sg", 3, "charlieandthechocolatefactory");
-            add_user(&mut db, charlie);
-            let bruce : Box<UserStruct> = create_user("Bruce", "bruce@nus.edu.sg", 4, "iambatman");
-            add_user(&mut db, bruce);
-            let joker : Box<UserStruct> = create_user("Joker", "joker@nus.edu.sg", 5, "whysoserious");
-            add_user(&mut db, joker);
-            println!("Mallory wants to login and update her password \n");
-            update_password(&mut db, "Mallory", "Malloryiswatchingyou");
-            
-            //delete this
-            update_password(&mut db, "Joker", "hellojokerhere");
-            println!("Eve wants to get her password => \n");
-            if let Some(password) = get_password(&mut db, "Eve") {
-                println!("Eve's password is: {}\n", password);
-            }
-
-        },
-        _ => {
-        }
-    }
-
-    println!("==============================Final Database State:===========================================\n");
-    print_database(&db);
-    println!("==============================================================================================\n");
-
-
+pub fn find_user_by_username_mut<'a>(db: &'a mut UserDatabase, username: & 'a str) -> Option<& 'a mut UserStruct> {
+    // TODO: Implement this function from Part 1
+    // Find user by username and return mutable reference
+    todo!("Implement find_user_by_username_mut from Part 1")
 }
 
+
+fn main() {
+    print!("Hello, world!");
+}

@@ -20,7 +20,7 @@ const SESSION_TOKEN_MAX_LEN: usize = 32;
 const MAX_PASSWORD_LENGTH: usize = 100;
 
 use database_fix_full::{
-    add_user, create_user, find_user_by_username, find_user_by_username_mut, update_database_daily, UserDatabase, UserStruct,
+    add_user, create_user, find_user_by_username, find_user_by_username_mut, update_database_daily, UserDatabase, UserStruct, array_to_string,
 };
 use database_wrapper::{
     initialize_enhanced_database, DatabaseExtensions, UserReference, UserStructT,
@@ -220,6 +220,7 @@ impl EnhancedStudentDatabase {
             (*self.rust_db).count
         );
         // Sync all users from Rust DB to C backend
+        println!("[Info] Syncing from RustDB to C db");
         for user_opt in self.rust_db.users.iter().take(self.rust_db.count as usize) {
             if user_opt.is_none() {
                 continue;
@@ -239,6 +240,7 @@ impl EnhancedStudentDatabase {
         let all_c_userstructs = self.c_extensions.get_all_user_references();
         // add all users in this vector to rust db
         for user in all_c_userstructs {
+            println!("Adding to rust db, {}", array_to_string(&user.username));
             add_user(&mut self.rust_db, user);
         }
     }
@@ -269,7 +271,7 @@ impl EnhancedStudentDatabase {
         // Update rust database (uses the function you translated for Part 1)
         update_database_daily(&mut self.rust_db);
         // Every 5 days, join the two databases
-        if *(self._day_counter) % 5 == 0 {
+        if *(self._day_counter) % 1 == 0 {
             self.join_databases();
         }
         // Perform daily updates on C backend

@@ -13,6 +13,7 @@ pub struct UserStructT {
     pub inactivity_count: c_int,
     pub is_active: c_int,
     pub session_token: [c_char; 32],
+    pub shared : c_int,
 }
 
 
@@ -51,6 +52,7 @@ extern "C" {
     fn user_login(db: *mut UserDatabaseT, user_name: *const c_char)->*const c_char;
     fn get_password(db: *mut UserDatabaseT, user_name: *const c_char) -> *const c_char;
     fn get_non_null_ref_count(db: *mut UserDatabaseT) -> c_int;
+    fn get_non_null_nor_shared_ref_count(db: *mut UserDatabaseT) -> c_int;
     fn find_user_by_username( db: *mut UserDatabaseT, user_name: *const c_char) -> *mut UserStructT;
     fn deactivate_users(db: *mut UserDatabaseT);
     fn init_session_manager();
@@ -139,7 +141,11 @@ impl DatabaseExtensions {
     }
     pub fn sync_user_from_rust_db(&self,user: *mut UserStructT){
             unsafe {
-                add_user(self.db, user);
+                // Only sync if pointer not shared already.
+                if (*user).shared == 0 {
+                    (*user).shared = 1;
+                    add_user(self.db, user);
+                }
             }
     }
 
@@ -183,16 +189,19 @@ impl DatabaseExtensions {
         }
     }
 
-
+    // Modified to only return the non shared ones
     pub fn get_all_user_references(&self) -> Vec<Box<UserStruct>> {
+        //let ref_count = unsafe { get_non_null_ref_count(self.db) };
+        let ref_count = unsafe {get_non_null_nor_shared_ref_count(self.db)};
+
         let refs = unsafe { get_user_reference_for_debugging(self.db)};
-        let ref_count = unsafe { get_non_null_ref_count(self.db) };
         let mut user_refs = Vec::new();
         let refs_slice = unsafe { std::slice::from_raw_parts(refs, ref_count as usize) };
         for &user_ptr in refs_slice {
             if !user_ptr.is_null() {
                 let user = unsafe { Box::from_raw(user_ptr as *mut UserStruct) };
                 user_refs.push(user);
+                println!("adding non shared non null user reference");
             }
         }
         user_refs

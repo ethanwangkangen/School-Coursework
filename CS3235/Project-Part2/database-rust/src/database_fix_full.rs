@@ -15,6 +15,7 @@ pub struct UserStruct {
     pub inactivity_count: i32,
     pub is_active: i32,
     pub session_token: [u8; MAX_SESSION_TOKEN_LEN],
+    pub shared: i32,
 }
 
 impl Default for UserStruct {
@@ -27,6 +28,7 @@ impl Default for UserStruct {
             username: [0; MAX_NAME_LEN],
             session_token: [0; MAX_SESSION_TOKEN_LEN],
             is_active: 0,
+            shared: 0,
         }
     }
 }
@@ -124,6 +126,7 @@ pub fn create_user(username: &str, email: &str, user_id: i32, password: &str) ->
         inactivity_count: 0,
         is_active : 1,
         session_token: [0; MAX_SESSION_TOKEN_LEN],
+        shared:0,
     };
 
     copy_string(&mut user.password, password, password.len());

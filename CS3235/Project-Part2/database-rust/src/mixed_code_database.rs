@@ -270,7 +270,7 @@ impl EnhancedStudentDatabase {
         update_database_daily(&mut self.rust_db);
         // Every 5 days, join the two databases
         if *(self._day_counter) % 5 == 0 {
-            //self.join_databases();
+        //    self.join_databases();
         }
         // Perform daily updates on C backend
         self.c_extensions.increment_day(&self.rust_db);

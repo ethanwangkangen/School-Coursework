@@ -374,6 +374,7 @@ char* get_password(UserDatabase_t* db, char* username) {
 
 UserStruct_t* find_user_by_session_token(UserDatabase_t* db, char* session_token) {
     for (int i = 0; i < db->count; i++) {
+        if (db->users[i] ==NULL) return;
         if (db->users[i] != NULL && strcmp(db->users[i]->session_token, session_token) == 0) {
             return db->users[i];
         }

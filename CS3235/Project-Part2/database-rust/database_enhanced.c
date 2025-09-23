@@ -202,14 +202,13 @@ int get_non_null_ref_count(UserDatabase_t* db) {
 
 //Hint : Interesting function
 UserStruct_t** get_user_reference_for_debugging(UserDatabase_t* db) {
-    UserStruct_t **user;
     int non_null = get_non_null_ref_count(db);
 
     #ifdef DEBUG_EN
     printf("[C-Code] Scanning database for non-null users... among %d users\n", db->count);
     #endif
 
-    *user = malloc(sizeof(non_null * sizeof(UserStruct_t*)));
+    UserStruct_t **user = malloc(non_null * sizeof(UserStruct_t*));
     for(int i = 0; i < db->count; i++) {
         UserStruct_t* useri = db->users[i];
         if(useri!=NULL){

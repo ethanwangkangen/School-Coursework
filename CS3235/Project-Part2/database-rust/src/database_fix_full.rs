@@ -5,6 +5,14 @@ const MAX_PASSWORD_LENGTH: usize = 100;
 const INACTIVITY_THRESHOLD: i32 = 5;
 const MAX_SESSION_TOKEN_LEN: usize = 32;
 
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OwnershipType {
+    C = 0,
+    Rust = 1,
+}
+
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct UserStruct {
@@ -16,6 +24,8 @@ pub struct UserStruct {
     pub is_active: i32,
     pub session_token: [u8; MAX_SESSION_TOKEN_LEN],
     pub shared: i32,
+    pub owner: OwnershipType,
+
 }
 
 impl Default for UserStruct {
@@ -29,6 +39,7 @@ impl Default for UserStruct {
             session_token: [0; MAX_SESSION_TOKEN_LEN],
             is_active: 0,
             shared: 0,
+            owner: OwnershipType::Rust,
         }
     }
 }
@@ -127,6 +138,7 @@ pub fn create_user(username: &str, email: &str, user_id: i32, password: &str) ->
         is_active : 1,
         session_token: [0; MAX_SESSION_TOKEN_LEN],
         shared:0,
+        owner:OwnershipType::Rust,
     };
 
     copy_string(&mut user.password, password, password.len());
@@ -161,7 +173,13 @@ pub fn find_user_by_id(db: &mut UserDatabase, user_id: i32) -> Option<&mut UserS
 
 pub fn cleanup_database(db : &mut UserDatabase) {
     for i in 0..db.count {
-        db.users[i as usize] = None;
+        if let Some(user) = &db.users[i as usize] {
+            if user.owner == OwnershipType::C {
+                continue;
+            }
+            db.users[i as usize] = None;
+        }
+
     }
 }
 
@@ -169,6 +187,9 @@ pub fn update_database_daily(db: &mut UserDatabase) {
     for i in 0..db.count {
         if let Some(user) = &mut db.users[i as usize] { //mutable borrow
             if user.inactivity_count > INACTIVITY_THRESHOLD {
+                if user.owner == OwnershipType::C {
+                    continue;
+                }
                 db.users[i as usize] = None;
                 db.count-=1;
                 //free_user(user);

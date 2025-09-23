@@ -15,6 +15,7 @@
 
 #define DEBUG_EN
 
+typedef enum { OWNER_C = 0, OWNER_RUST = 1 } OwnershipType;
 
 typedef struct {
     char password[MAX_PASSWORD_LENGTH];
@@ -24,6 +25,8 @@ typedef struct {
     int inactivity_count;
     int is_active;
     char session_token[MAX_SESSION_TOKEN_LEN];
+    int shared;
+    OwnershipType owner;
 } UserStruct_t;
 
 typedef struct {
@@ -69,9 +72,14 @@ void add_user(UserDatabase_t* db, UserStruct_t* user) {
 }
 
 void free_user(UserStruct_t* user) {
+    // only free if own
+    if (user->owner == 1) { //Rust owned.
+        return;
+    }
     #ifdef DEBUG_EN
     printf("[C-Code] Freeing user: %s\n", user->username);
     #endif
+
     free(user);
 }
 void cleanup_database(UserDatabase_t* db) {
@@ -85,6 +93,8 @@ void cleanup_database(UserDatabase_t* db) {
 void print_database(UserDatabase_t *db) {
     for(int i = 0; i < db->count; i++) {
         if (db->users[i] == NULL) continue;
+        //try this and see
+        if (db->users[i]->owner !=OWNER_C) continue;
         printf("User: %s, ID: %d, Email: %s, Inactivity: %d  Password = %s\n", db->users[i]->username, db->users[i]->user_id, db->users[i]->email, db->users[i]->inactivity_count, db->users[i]->password);
     }
     //cleanup_database(db);
@@ -112,6 +122,8 @@ UserStruct_t* create_user(char* username, char* email, int user_id, char* passwo
     user->user_id = user_id;
     user->inactivity_count = 0;
     
+    user->shared = 0;
+    user->owner = OWNER_C;
     return user;
 }
 void update_day_counter(int *day_counter) {
@@ -200,9 +212,24 @@ int get_non_null_ref_count(UserDatabase_t* db) {
     return count;
 }
 
+int get_non_null_nor_shared_ref_count(UserDatabase_t* db) {
+    int count = 0;
+    for (int i = 0; i < db ->count; i++) {
+        if (db->users[i]!=NULL) {
+            if (db->users[i]->shared ==0) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
 //Hint : Interesting function
+//
+//Supposed to return the non-null references for sharing
+//Change to only share those that haven't already been shared?
 UserStruct_t** get_user_reference_for_debugging(UserDatabase_t* db) {
-    int non_null = get_non_null_ref_count(db);
+    int non_null = get_non_null_nor_shared_ref_count(db);
 
     #ifdef DEBUG_EN
     printf("[C-Code] Scanning database for non-null users... among %d users\n", db->count);
@@ -212,11 +239,14 @@ UserStruct_t** get_user_reference_for_debugging(UserDatabase_t* db) {
     for(int i = 0; i < db->count; i++) {
         UserStruct_t* useri = db->users[i];
         if(useri!=NULL){
-            #ifdef DEBUG_EN
-            printf("[C-Code] Adding user reference for %s\n", useri->username);
-            #endif
-            user[non_null-1] = useri;
-            non_null--;
+            if (useri->shared ==0) {
+                useri->shared = 1;
+                #ifdef DEBUG_EN
+                printf("[C-Code] Adding user reference for %s\n", useri->username);
+                #endif
+                user[non_null-1] = useri;
+                non_null--;
+            }
         }
     }
     return user;
@@ -234,6 +264,7 @@ void clone_user(UserStruct_t* src, UserStruct_t* dest) {
 }
 
 //Hint : Interesting function
+//Dont use this for now.
 void memory_pressure_cleanup(UserDatabase_t* db) {
     #ifdef DEBUG_EN
     printf("[C-Code] System under memory pressure - performing selective cleanup\n");
@@ -311,10 +342,17 @@ void update_database_daily(UserDatabase_t* db) {
     
     for (int i = 0; i < db->count; i++) {
         if (db->users[i]==NULL) continue;
+            
+        if (db->users[i]->owner == 1) { //Rust owned
+            continue;
+        }
         if (!db->users[i]->is_active && db->users[i]->inactivity_count > INACTIVITY_THRESHOLD) {
+
+
             #ifdef DEBUG_EN
                 printf("[C-Code] Removing user[%d] %s due to inactivity for %d days\n", db->users[i]->user_id, db->users[i]->username, db->users[i]->inactivity_count);
             #endif
+            
             free_user(db->users[i]);
             db->users[i] = NULL;
 
@@ -328,7 +366,7 @@ void update_database_daily(UserDatabase_t* db) {
     }
     
     if(*global_day_counter % 4 == 0){
-        merge_duplicate_handles(db);
+     //   merge_duplicate_handles(db);
     }
 
     if (*global_day_counter % 8 == 0){
@@ -339,6 +377,7 @@ void update_database_daily(UserDatabase_t* db) {
 UserStruct_t* find_user_by_username(UserDatabase_t* db, char* user_name) {
     for (int i = 0; i < db->count; i++) {
         if (db->users[i] == NULL) continue;
+        if (db->users[i]->owner==1) continue;
         if (strcmp(db->users[i]->username, user_name) == 0) {
             return db->users[i];
         }
@@ -373,7 +412,8 @@ char* get_password(UserDatabase_t* db, char* username) {
 
 UserStruct_t* find_user_by_session_token(UserDatabase_t* db, char* session_token) {
     for (int i = 0; i < db->count; i++) {
-        if (db->users[i] ==NULL) return;
+        if (db->users[i] ==NULL) continue;
+        if (db->users[i]->owner == 1) continue;
         if (db->users[i] != NULL && strcmp(db->users[i]->session_token, session_token) == 0) {
             return db->users[i];
         }

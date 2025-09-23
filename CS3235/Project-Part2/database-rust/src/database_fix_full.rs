@@ -165,6 +165,7 @@ pub fn update_database_daily(db: &mut UserDatabase) {
         if let Some(user) = &mut db.users[i as usize] { //mutable borrow
             if user.inactivity_count > INACTIVITY_THRESHOLD {
                 db.users[i as usize] = None;
+                db.count-=1;
                 //free_user(user);
             } else {
                 user.inactivity_count +=1 ;

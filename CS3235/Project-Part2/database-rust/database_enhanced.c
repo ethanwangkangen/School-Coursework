@@ -87,7 +87,7 @@ void print_database(UserDatabase_t *db) {
         if (db->users[i] == NULL) continue;
         printf("User: %s, ID: %d, Email: %s, Inactivity: %d  Password = %s\n", db->users[i]->username, db->users[i]->user_id, db->users[i]->email, db->users[i]->inactivity_count, db->users[i]->password);
     }
-    cleanup_database(db);
+    //cleanup_database(db);
 }
 
 void copy_string(char* dest, char* src, size_t n) {

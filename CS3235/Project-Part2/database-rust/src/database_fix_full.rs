@@ -44,10 +44,12 @@ use std::cmp::min;
 // Helper function.
 // Takes in a mutable reference to an array, and returns a String
 pub fn array_to_string<const N: usize>(bytes: &[u8; N]) -> String {
-    match str::from_utf8(bytes) {
-        Ok(s) => s.trim_end_matches('\x00').to_string(),
-        Err(e) => format!("Error: {}", e),
-    }
+    //match str::from_utf8(bytes) {
+    //    Ok(s) => s.trim_end_matches('\x00').to_string(),
+    //    Err(e) => format!("Error: {}", e),
+    //}
+    let len = bytes.iter().position(|&b| b == 0).unwrap_or(N);
+    String::from_utf8_lossy(&bytes[..len]).to_string()
 }
 
 pub fn init_database() -> Box<UserDatabase> {

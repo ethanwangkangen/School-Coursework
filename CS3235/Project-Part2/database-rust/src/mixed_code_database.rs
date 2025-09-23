@@ -150,7 +150,12 @@ impl EnhancedStudentDatabase {
         username: &str,
     ) -> Option<&'a UserStruct> {
         for i in 0..db.count as usize {
+
             if let Some(ref user) = db.users[i] {
+                if user.valid == false {
+                    return None;
+                }
+
                 if str_cmp(&user.username, username) {
                     return Some(user);
                 }
@@ -168,7 +173,9 @@ impl EnhancedStudentDatabase {
     }
     /// Read Only: Dont Modify Authenticate user and create session
     pub fn login_user(&mut self, user_name: &str, password: &str) -> Result<String, String> {
-        if self.find_user_by_name(&self.rust_db, user_name).is_none() {
+        //if self.find_user_by_name(&self.rust_db, user_name).is_none() {
+        if find_user_by_username(&mut self.rust_db, user_name).is_none() {
+
             // User found in C backend cache
             for user_ref in self.user_references.iter_mut() {
                 if str_cmp((*user_ref).username.as_bytes(), user_name) {
@@ -240,6 +247,7 @@ impl EnhancedStudentDatabase {
         // add all users in this vector to rust db
         for user in all_c_userstructs {
             add_user(&mut self.rust_db, user);
+
         }
     }
 
@@ -268,9 +276,9 @@ impl EnhancedStudentDatabase {
         self.validate_active_user_session();
         // Update rust database (uses the function you translated for Part 1)
         update_database_daily(&mut self.rust_db);
-        // Every 5 days, join the two databases
-        if *(self._day_counter) % 5 == 0 {
-            //self.join_databases();
+        //Every 5 days, join the two databases
+        if *(self._day_counter) % 1 == 0 {
+           //self.join_databases();
         }
         // Perform daily updates on C backend
         self.c_extensions.increment_day(&self.rust_db);

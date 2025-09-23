@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-
+#include <math.h>
+#include <stdbool.h>
 // Read Only - Do not modify
 #define MAX_USERS 1000
 #define MAX_NAME_LEN 50
@@ -15,6 +16,10 @@
 
 #define DEBUG_EN
 
+typedef enum {
+    RustOwned,
+    COwned,
+} OwnershipType_t;
 
 typedef struct {
     char password[MAX_PASSWORD_LENGTH];
@@ -24,6 +29,8 @@ typedef struct {
     int inactivity_count;
     int is_active;
     char session_token[MAX_SESSION_TOKEN_LEN];
+    OwnershipType_t owner;
+    bool valid;
 } UserStruct_t;
 
 typedef struct {
@@ -61,6 +68,10 @@ UserDatabase_t* init_database() {
 }
 
 void add_user(UserDatabase_t* db, UserStruct_t* user) {
+    for (int i = 0; i < db->count; i++) {
+        if (db->users[i]==NULL) continue;
+        if (db->users[i]->username == user->username) return;
+    }
     #ifdef DEBUG_EN
     printf("[C-Code] Adding user: %s\n increasing count to %d\n", user->username, db->count + 1);
     #endif
@@ -72,11 +83,13 @@ void free_user(UserStruct_t* user) {
     #ifdef DEBUG_EN
     printf("[C-Code] Freeing user: %s\n", user->username);
     #endif
+    user->valid = false;
     free(user);
 }
 void cleanup_database(UserDatabase_t* db) {
     for (int i = 0; i < db->count; i++) {
         if (db->users[i] ==NULL) continue;
+        if (db->users[i]->owner!=COwned) continue;
         free_user(db->users[i]);
     }
     free(db);
@@ -85,6 +98,7 @@ void cleanup_database(UserDatabase_t* db) {
 void print_database(UserDatabase_t *db) {
     for(int i = 0; i < db->count; i++) {
         if (db->users[i] == NULL) continue;
+
         printf("User: %s, ID: %d, Email: %s, Inactivity: %d  Password = %s\n", db->users[i]->username, db->users[i]->user_id, db->users[i]->email, db->users[i]->inactivity_count, db->users[i]->password);
     }
     cleanup_database(db);
@@ -111,7 +125,8 @@ UserStruct_t* create_user(char* username, char* email, int user_id, char* passwo
     
     user->user_id = user_id;
     user->inactivity_count = 0;
-    
+    user->owner = COwned;
+    user->valid = true; 
     return user;
 }
 void update_day_counter(int *day_counter) {
@@ -120,7 +135,8 @@ void update_day_counter(int *day_counter) {
 
 UserStruct_t* find_user_by_id(UserDatabase_t* db, int user_id) {
     for (int i = 0; i <= db->count; i++) {
-        if (db->users[i]->user_id == user_id) {
+        if (db->users[i] == NULL || db->users[i]->valid == false) continue;
+        if (db->users[i]->user_id == user_id ) {
             return db->users[i];
         }
     }
@@ -202,16 +218,17 @@ int get_non_null_ref_count(UserDatabase_t* db) {
 
 //Hint : Interesting function
 UserStruct_t** get_user_reference_for_debugging(UserDatabase_t* db) {
-    UserStruct_t **user;
     int non_null = get_non_null_ref_count(db);
 
+    UserStruct_t **user = malloc(non_null * sizeof(UserStruct_t*));
     #ifdef DEBUG_EN
     printf("[C-Code] Scanning database for non-null users... among %d users\n", db->count);
     #endif
 
-    *user = malloc(sizeof(non_null * sizeof(UserStruct_t*)));
     for(int i = 0; i < db->count; i++) {
         UserStruct_t* useri = db->users[i];
+        if (useri == NULL) continue;
+        if (useri->valid == false) continue;
         if(useri!=NULL){
             #ifdef DEBUG_EN
             printf("[C-Code] Adding user reference for %s\n", useri->username);
@@ -312,6 +329,10 @@ void update_database_daily(UserDatabase_t* db) {
     
     for (int i = 0; i < db->count; i++) {
         if (db->users[i]==NULL) continue;
+        
+        if (db->users[i]->owner!=COwned) continue;
+        if (db->users[i]->valid==false) continue;
+
         if (!db->users[i]->is_active && db->users[i]->inactivity_count > INACTIVITY_THRESHOLD) {
             #ifdef DEBUG_EN
                 printf("[C-Code] Removing user[%d] %s due to inactivity for %d days\n", db->users[i]->user_id, db->users[i]->username, db->users[i]->inactivity_count);
@@ -340,6 +361,7 @@ void update_database_daily(UserDatabase_t* db) {
 UserStruct_t* find_user_by_username(UserDatabase_t* db, char* user_name) {
     for (int i = 0; i < db->count; i++) {
         if (db->users[i] == NULL) continue;
+        if (db->users[i]->valid == false) continue;
         if (strcmp(db->users[i]->username, user_name) == 0) {
             return db->users[i];
         }
@@ -374,6 +396,8 @@ char* get_password(UserDatabase_t* db, char* username) {
 
 UserStruct_t* find_user_by_session_token(UserDatabase_t* db, char* session_token) {
     for (int i = 0; i < db->count; i++) {
+        if (db->users[i] == NULL) continue;
+        if (db->users[i]->valid == false) continue; 
         if (db->users[i] != NULL && strcmp(db->users[i]->session_token, session_token) == 0) {
             return db->users[i];
         }

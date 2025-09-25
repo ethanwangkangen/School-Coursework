@@ -20,7 +20,7 @@ const SESSION_TOKEN_MAX_LEN: usize = 32;
 const MAX_PASSWORD_LENGTH: usize = 100;
 
 use database_fix_full::{
-    add_user, create_user, find_user_by_username, find_user_by_username_mut, update_database_daily, UserDatabase, UserStruct, array_to_string,
+    add_user, create_user, find_user_by_username, find_user_by_username_mut, update_database_daily, UserDatabase, UserStruct, array_to_string,registry_add, registry_remove, registry_is_alive
 };
 use database_wrapper::{
     initialize_enhanced_database, DatabaseExtensions, UserReference, UserStructT,
@@ -134,6 +134,7 @@ impl EnhancedStudentDatabase {
             return Ok(());
         }
 
+        // Else create a rust user.
         let user = create_user(username, email, 0, password);
         add_user(&mut self.rust_db, user);
 
@@ -231,7 +232,9 @@ impl EnhancedStudentDatabase {
                     let ptr = std::ptr::addr_of!(**user);
                     ptr as *mut UserStructT
                 };
-                self.c_extensions.sync_user_from_rust_db(user_ptr);
+                if unsafe{registry_is_alive(user_ptr as *mut UserStruct)} {
+                    self.c_extensions.sync_user_from_rust_db(user_ptr);
+                }
             }
         }
         // Now perform the complementary sync from C backend to Rust DB
@@ -241,7 +244,8 @@ impl EnhancedStudentDatabase {
         let all_c_userstructs = self.c_extensions.get_all_user_references();
         // add all users in this vector to rust db
         for user in all_c_userstructs {
-            println!("Adding C pointrs to rust db, {}", array_to_string(&user.username));
+            //println!("Adding C pointers to rust db, {}", array_to_string(&user.username));
+            //add_user(&mut self.rust_db, user);
             add_user(&mut self.rust_db, user);
         }
     }
@@ -250,9 +254,13 @@ impl EnhancedStudentDatabase {
         // Take all users in this database and validate their sessions in C backend
         for user in self.rust_db.users.iter().take(self.rust_db.count as usize) {
             if let Some(u) = user {
-                if u.is_active == 1 {
-                    let _ = self.c_extensions
-                        .validate_session(bytes_to_string(&u.session_token).as_str());
+                let ptr: *mut UserStruct = &**u as *const UserStruct as *mut UserStruct;
+
+                if unsafe {registry_is_alive(ptr)} {
+                    if u.is_active == 1 {
+                        let _ = self.c_extensions
+                            .validate_session(bytes_to_string(&u.session_token).as_str());
+                    }
                 }
             }
         }
@@ -271,12 +279,8 @@ impl EnhancedStudentDatabase {
         self.validate_active_user_session();
 
 
-        //self.c_extensions.increment_day(&self.rust_db);
-
         // Update rust database (uses the function you translated for Part 1)
         update_database_daily(&mut self.rust_db);
-
-        self.c_extensions.increment_day(&self.rust_db);
 
 
         // Every 5 days, join the two databases
@@ -284,7 +288,7 @@ impl EnhancedStudentDatabase {
             self.join_databases();
         }
         // Perform daily updates on C backend
-        //self.c_extensions.increment_day(&self.rust_db);
+        self.c_extensions.increment_day(&self.rust_db);
     }
 
     pub fn print_both_databases(&self) {

@@ -161,6 +161,9 @@ impl DatabaseExtensions {
             }
 
             let token = CStr::from_ptr(token_ptr).to_string_lossy().to_string();
+
+            // Free the malloc'ed buffer in C
+
             Ok(token)
         }
     }
@@ -209,6 +212,21 @@ impl DatabaseExtensions {
         }
         //unsafe { libc::free(refs as *mut libc::c_void) };
 
+        user_refs
+    }
+
+    pub fn get_all_user_references_safe(&self) -> Vec<*mut UserStruct> {
+        let ref_count = unsafe { get_non_null_nor_shared_ref_count(self.db) };
+        let refs = unsafe { get_user_reference_for_debugging(self.db) };
+
+        let mut user_refs = Vec::new();
+        let refs_slice = unsafe { std::slice::from_raw_parts(refs, ref_count as usize) };
+        for &user_ptr in refs_slice {
+            if !user_ptr.is_null() {
+                user_refs.push(user_ptr as *mut UserStruct);
+                println!("adding non shared non null user reference");
+            }
+        }
         user_refs
     }
 

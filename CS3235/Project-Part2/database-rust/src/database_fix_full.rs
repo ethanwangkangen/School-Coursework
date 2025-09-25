@@ -1,3 +1,8 @@
+use std::collections::HashSet;
+use std::sync::Mutex;
+use std::ptr::NonNull;
+
+
 const MAX_USERS: usize = 1000;
 const MAX_NAME_LEN: usize = 50;
 const MAX_EMAIL_LEN: usize = 50;
@@ -5,6 +10,48 @@ const MAX_PASSWORD_LENGTH: usize = 100;
 const INACTIVITY_THRESHOLD: i32 = 5;
 const MAX_SESSION_TOKEN_LEN: usize = 32;
 
+// Note: need to include lazy_static="1.4" in Cargo.toml
+lazy_static::lazy_static! {
+    // Global registry of "alive" pointers
+    static ref REGISTRY: Mutex<HashSet<usize>> = Mutex::new(HashSet::new());
+}
+
+#[no_mangle]
+pub extern "C" fn registry_add(ptr: *mut UserStruct) {
+    if let Some(nn) = NonNull::new(ptr) {
+        let mut reg = REGISTRY.lock().unwrap();
+        reg.insert(nn.as_ptr() as usize);
+        if !reg.insert(nn.as_ptr() as usize) {
+            eprintln!("[WARN] registry_add called twice for ptr {:?}", nn.as_ptr());
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn registry_remove(ptr: *mut UserStruct) {
+    if let Some(nn) = NonNull::new(ptr) {
+        println!("Removing from registry");
+        let mut reg = REGISTRY.lock().unwrap();
+        let present = reg.remove(&(nn.as_ptr() as usize));
+        if present {
+//            println!("Pointer successfully removed from registry");
+        } else {
+            println!("Tried to remove pointer but failed?");
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn registry_is_alive(ptr: *mut UserStruct) -> bool {
+    if let Some(nn) = NonNull::new(ptr) {
+        let reg = REGISTRY.lock().unwrap();
+        //println!("Pointer found in registry alive");
+        reg.contains(&(nn.as_ptr() as usize))
+    } else {
+        eprintln!("No longer in registry");
+        false
+    }
+}
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,61 +122,16 @@ pub fn init_database() -> Box<UserDatabase> {
   Box::new(db)
 }
 
-//pub fn add_user(db: &mut UserDatabase, user: Box<UserStruct>) {
-//  if (db.count as usize)< MAX_USERS as usize{
-    
-//    if user.owner == OwnershipType::C {
-    //if false{
-            // C owns this memory: don't wrap in Box
-            //let raw: *mut UserStruct = Box::into_raw(user); // get the pointer
-            //db.users[db.count as usize] = Some(unsafe { Box::from_raw(raw) });
-            // Now immediately forget, so Rust won’t free later
-            //std::mem::forget(raw); 
-            
 
-        // C owns this memory: don't give Rust responsibility to free
-//    let ptr: *mut UserStruct = Box::into_raw(user);
-
-    // Leak the Box permanently to stop Rust from freeing
-    // This makes the allocation "immortal" from Rust's perspective.
-//    let leaked_ref: &'static mut UserStruct = unsafe { &mut *ptr };
-
-    // Re-wrap the leaked reference in a Box. This Box points to a leaked value,
-    // so when dropped later it won't try to free C's memory.
-//    let fake_box: Box<UserStruct> = unsafe { Box::from_raw(leaked_ref) };
-//        db.users[db.count as usize] = Some(fake_box);
-
-//        } else {
-//            let mut user_mut : Box<UserStruct> = user;
-//            user_mut.user_id = db.count;
-//            db.users[db.count as usize] = Some(user_mut); // Rust-owned
-//        }
-        
-//    db.count +=1;
-//  }
-//}
 
 pub fn add_user(db: &mut UserDatabase, user: Box<UserStruct>) {
     if (db.count as usize) < MAX_USERS {
-        if user.owner == OwnershipType::C {
-            // Convert Box<UserStruct> into raw pointer
-            //let ptr: *mut UserStruct = Box::into_raw(user);
-
-            let leaked_ref: &'static mut UserStruct = Box::leak(user);
-            // Immediately wrap back in a Box so we can put it into db.users
-            let fake_box: Box<UserStruct> = unsafe { Box::from_raw(leaked_ref) };
-
-            // Store in the DB
-            db.users[db.count as usize] = Some(fake_box);
-            if let Some(ref u) = db.users[db.count as usize] {
-                std::mem::forget(u);
-            }
-        } else {
-            let mut user_mut = user;
-            user_mut.user_id = db.count;
-            db.users[db.count as usize] = Some(user_mut); // Rust-owned
+        let ptr = Box::into_raw(user);   // take ownership
+        unsafe {
+            registry_add(ptr);           // mark as alive
+            // rewrap so Rust still manages it
+            db.users[db.count as usize] = Some(Box::from_raw(ptr));
         }
-
         db.count += 1;
     }
 }
@@ -150,14 +152,23 @@ pub fn print_database(db: &UserDatabase) {
     // If it's None, the block is skipped.
 
     if let Some(user) = &db.users[i as usize] {
-      println!(
-        "User: {}, ID: {}, Email: {}, Inactivity: {}, Password: {}",
-        array_to_string(&user.username),
-        user.user_id,
-        array_to_string(&user.email),
-        user.inactivity_count,
-        array_to_string(&user.password),
-      );
+        let ptr: *mut UserStruct = &**user as *const UserStruct as *mut UserStruct;
+
+        if !registry_is_alive(ptr) {
+            println!("User at {:?} already freed (skipping)", ptr);
+            continue;
+        }
+            
+
+
+        println!(
+            "User: {}, ID: {}, Email: {}, Inactivity: {}, Password: {}",
+            array_to_string(&user.username),
+            user.user_id,
+            array_to_string(&user.email),
+            user.inactivity_count,
+            array_to_string(&user.password),
+        );
     }
   }
 }
@@ -220,10 +231,16 @@ pub fn find_user_by_id(db: &mut UserDatabase, user_id: i32) -> Option<&mut UserS
 
 pub fn cleanup_database(db : &mut UserDatabase) {
     for i in 0..db.count {
-        if let Some(user) = &db.users[i as usize] {
+        if let Some(user) = db.users[i as usize].take() {
             if user.owner == OwnershipType::C {
+                // put it back, don’t free
+                db.users[i as usize] = Some(user);
                 continue;
             }
+            // edit registry
+            let ptr = Box::into_raw(user);
+            unsafe { registry_remove(ptr); }
+            unsafe { Box::from_raw(ptr); } // actually free
             db.users[i as usize] = None;
         }
 
@@ -231,63 +248,53 @@ pub fn cleanup_database(db : &mut UserDatabase) {
 }
 
 pub fn update_database_daily(db: &mut UserDatabase) {
+    
     for i in 0..db.count {
-        if let Some(user) = &mut db.users[i as usize] { //mutable borrow
+        if let Some(user) = db.users[i as usize].take() {
+            // get raw pointer for registry check
+            let ptr: *mut UserStruct = &*user as *const UserStruct as *mut UserStruct;
+
+            // Check if alive in registry
+            if !unsafe { registry_is_alive(ptr) } {
+                // pointer already dead → skip entirely
+                db.users[i as usize] = Some(user);
+                continue;
+            }
+
+            // Skip C-owned users
+            if user.owner == OwnershipType::C {
+                db.users[i as usize] = Some(user);
+                continue;
+            }
+
+            // Rust-owned users: either free or increment inactivity
             if user.inactivity_count > INACTIVITY_THRESHOLD {
-                if user.owner == OwnershipType::C {
-                    continue;
-                }
-                println!("[Rust] Removing user {} for inactivity", array_to_string(&user.username));
+                println!(
+                    "[Rust] Removing user {} for inactivity",
+                    array_to_string(&user.username)
+                );
+
+                // Remove from registry and drop the box
+                let raw = Box::into_raw(user);
+                unsafe { registry_remove(raw) };
+                unsafe { drop(Box::from_raw(raw)); }
+
                 db.users[i as usize] = None;
-                db.count-=1;
-                //free_user(user);
+                //db.count -= 1;
             } else {
-                if user.owner == OwnershipType::C {
-                    continue;
-                }
-                println!("[Rust] Incrementing inactivity count for {}", array_to_string(&user.username));
-                user.inactivity_count +=1 ;
+                println!(
+                    "[Rust] Incrementing inactivity count for {}",
+                    array_to_string(&user.username)
+                );
+
+                let mut user = user;
+                user.inactivity_count += 1;
+                db.users[i as usize] = Some(user);
             }
         }
     }
 }
 
-
-
-/*
-pub fn update_database_daily(db: &mut UserDatabase) {
-    for i in 0..db.count {
-        if let Some(mut user_box) = db.users[i as usize].take() {
-            if user_box.inactivity_count > INACTIVITY_THRESHOLD {
-                if user_box.owner == OwnershipType::C {
-                    // Leak so Rust won’t free C-owned memory
-                    println!("[Rust] Leaking C owned user {} for inactivity",
-                             array_to_string(&user_box.username));
-                    //let _ = Box::into_raw(user_box);
-                } else {
-                    println!(
-                        "[Rust] Removing Rust owned user {} for inactivity",
-                        array_to_string(&user_box.username)
-                    );
-                    // Rust-owned: dropping user_box here frees the memory
-                }
-                db.users[i as usize] = None;
-                db.count -= 1;
-            } else {
-                if user_box.owner != OwnershipType::C {
-                    println!(
-                        "[Rust] Incrementing inactivity count for {}",
-                        array_to_string(&user_box.username)
-                    );
-                    user_box.inactivity_count += 1;
-                }
-                // Put it back
-                db.users[i as usize] = Some(user_box);
-            }
-        }
-    }
-}
-*/
 
 
 pub fn update_username (db: &mut UserDatabase, username : &str, new_username : &str) {

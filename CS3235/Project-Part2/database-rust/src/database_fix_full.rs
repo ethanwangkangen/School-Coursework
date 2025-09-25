@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 use std::ptr::NonNull;
 
 
@@ -10,20 +10,15 @@ const MAX_PASSWORD_LENGTH: usize = 100;
 const INACTIVITY_THRESHOLD: i32 = 5;
 const MAX_SESSION_TOKEN_LEN: usize = 32;
 
-// Note: need to include lazy_static="1.4" in Cargo.toml
-lazy_static::lazy_static! {
-    // Global registry of "alive" pointers
-    static ref REGISTRY: Mutex<HashSet<usize>> = Mutex::new(HashSet::new());
-}
+static REGISTRY: LazyLock<Mutex<HashSet<usize>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
 
 #[no_mangle]
 pub extern "C" fn registry_add(ptr: *mut UserStruct) {
     if let Some(nn) = NonNull::new(ptr) {
         let mut reg = REGISTRY.lock().unwrap();
         reg.insert(nn.as_ptr() as usize);
-        if !reg.insert(nn.as_ptr() as usize) {
-            eprintln!("[WARN] registry_add called twice for ptr {:?}", nn.as_ptr());
-        }
     }
 }
 
@@ -33,23 +28,16 @@ pub extern "C" fn registry_remove(ptr: *mut UserStruct) {
         println!("Removing from registry");
         let mut reg = REGISTRY.lock().unwrap();
         let present = reg.remove(&(nn.as_ptr() as usize));
-        if present {
-//            println!("Pointer successfully removed from registry");
-        } else {
-            println!("Tried to remove pointer but failed?");
-        }
     }
 }
 
 #[no_mangle]
-pub extern "C" fn registry_is_alive(ptr: *mut UserStruct) -> bool {
+pub extern "C" fn registry_is_alive(ptr: *mut UserStruct) -> i32 {
     if let Some(nn) = NonNull::new(ptr) {
         let reg = REGISTRY.lock().unwrap();
-        //println!("Pointer found in registry alive");
-        reg.contains(&(nn.as_ptr() as usize))
+        reg.contains(&(nn.as_ptr() as usize)) as i32
     } else {
-        eprintln!("No longer in registry");
-        false
+        0
     }
 }
 
@@ -154,12 +142,9 @@ pub fn print_database(db: &UserDatabase) {
     if let Some(user) = &db.users[i as usize] {
         let ptr: *mut UserStruct = &**user as *const UserStruct as *mut UserStruct;
 
-        if !registry_is_alive(ptr) {
-            println!("User at {:?} already freed (skipping)", ptr);
+        if registry_is_alive(ptr)==0 {
             continue;
         }
-            
-
 
         println!(
             "User: {}, ID: {}, Email: {}, Inactivity: {}, Password: {}",
@@ -255,7 +240,7 @@ pub fn update_database_daily(db: &mut UserDatabase) {
             let ptr: *mut UserStruct = &*user as *const UserStruct as *mut UserStruct;
 
             // Check if alive in registry
-            if !unsafe { registry_is_alive(ptr) } {
+            if unsafe { registry_is_alive(ptr)==0 } {
                 // pointer already dead → skip entirely
                 db.users[i as usize] = Some(user);
                 continue;

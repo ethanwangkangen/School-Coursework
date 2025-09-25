@@ -10,7 +10,7 @@
 #define MAX_EMAIL_LEN 50
 #define MAX_PASSWORD_LENGTH 100
 #define SESSION_MAX_IDLE_TIME 1
-#define MAX_SESSIONS 100
+#define MAX_SESSIONS 1000
 #define MAX_SESSION_TOKEN_LEN 32
 
 #define DEBUG_EN
@@ -103,10 +103,8 @@ void cleanup_database(UserDatabase_t* db) {
 void print_database(UserDatabase_t *db) {
     for(int i = 0; i < db->count; i++) {
         if (db->users[i] == NULL) continue;
-        //try this and see
-    //    if (db->users[i]->owner !=OWNER_C) continue;
-        if (!registry_is_alive(db->users[i])) continue;
-        printf("User: %s, ID: %d, Email: %s, Inactivity: %d  Password = %s\n", db->users[i]->username, db->users[i]->user_id, db->users[i]->email, db->users[i]->inactivity_count, db->users[i]->password);
+        if (registry_is_alive(db->users[i]) ==0) continue;
+        printf("User: %s, ID: %d, Email: %s, Inactivity: %d, Password: %s\n", db->users[i]->username, db->users[i]->user_id, db->users[i]->email, db->users[i]->inactivity_count, db->users[i]->password);
     }
     //cleanup_database(db);
 }
@@ -134,7 +132,7 @@ UserStruct_t* create_user(char* username, char* email, int user_id, char* passwo
     user->inactivity_count = 0;
     
     user->shared = 0;
-    user->owner = OWNER_C; //problematic?
+    user->owner = OWNER_C;
     return user;
 }
 void update_day_counter(int *day_counter) {
@@ -302,8 +300,6 @@ void memory_pressure_cleanup(UserDatabase_t* db) {
 }
 
 
-
-
 SessionInfo_t* find_session_by_token(SessionManager_t* sm, char* token) {
     for (int i = 0; i < sm->session_count; i++) {
         if (sm -> sessions[i] == NULL || sm->sessions[i]->session_token == NULL) {
@@ -316,7 +312,7 @@ SessionInfo_t* find_session_by_token(SessionManager_t* sm, char* token) {
     return NULL;
 }
 
-/*
+
 int validate_user_session(char* token) {
     if (!global_session_manager || !token) {
         return 0;
@@ -334,8 +330,8 @@ int validate_user_session(char* token) {
     else session->session_idle_time += 1;
     return 0;
 }
-*/
 
+/*
 int validate_user_session(char* token) {
     if (!global_session_manager || !token) return 0;
 
@@ -359,7 +355,7 @@ int validate_user_session(char* token) {
 }
 
 
-
+*/
 
 void merge_duplicate_handles(UserDatabase_t *db){
     for(int i = (db->count-1); i >= 0; i--){
@@ -383,7 +379,7 @@ void update_database_daily(UserDatabase_t* db) {
 
             if (db->users[i]->owner == 1) {
                 // don't free but remove the alias
-                printf("[C-Code] Removing rust alias for %s\n", db->users[i]->username);
+                printf("[C-Code] Removing rust alias for \n");
                 db->users[i] = NULL;
             } else {
 
@@ -396,8 +392,8 @@ void update_database_daily(UserDatabase_t* db) {
             }
 
         } else {
-            if (db->users[i]->owner ==1)continue;
-            if(validate_user_session(db->users[i]->session_token)) db->users[i]->is_active = 0;
+           // if (db->users[i]->owner ==1)continue; //need a way to invalidate rust owned
+            if(!validate_user_session(db->users[i]->session_token)) db->users[i]->is_active = 0;
             #ifdef DEBUG_EN
                 printf("[C-Code] %d is max allowed threshold Incrementing inactivity for user[%d] %s to %d days\n", INACTIVITY_THRESHOLD, db->users[i]->user_id, db->users[i]->username, db->users[i]->inactivity_count + 1);
               #endif
@@ -453,8 +449,8 @@ char* get_password(UserDatabase_t* db, char* username) {
 UserStruct_t* find_user_by_session_token(UserDatabase_t* db, char* session_token) {
     for (int i = 0; i < db->count; i++) {
         if (db->users[i] ==NULL) continue;
-       // if (db->users[i]->owner == 1) continue;
-        if (!registry_is_alive(db->users[i])) continue;
+        //if (db->users[i]->owner == 1) continue;
+        if (registry_is_alive(db->users[i])==0) continue;
         if (db->users[i] != NULL && strcmp(db->users[i]->session_token, session_token) == 0) {
             return db->users[i];
         }
@@ -475,12 +471,12 @@ void deactivate_users(UserDatabase_t* rust_db) {
             user->is_active = 0;
         }
         
+       // Need to find another way to deactivate rust user. 
+        user = find_user_by_session_token(rust_db, global_session_manager->sessions[i]->session_token);
         
-      //  user = find_user_by_session_token(rust_db, global_session_manager->sessions[i]->session_token);
-        
-      //  if (user != NULL) {
-      //      user->is_active = 0;
-      //  }
+        if (user != NULL) {
+            user->is_active = 0;
+        }
         
         free(global_session_manager->sessions[i]);
         global_session_manager->sessions[i] = NULL;

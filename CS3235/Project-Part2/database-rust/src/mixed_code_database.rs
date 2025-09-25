@@ -232,7 +232,7 @@ impl EnhancedStudentDatabase {
                     let ptr = std::ptr::addr_of!(**user);
                     ptr as *mut UserStructT
                 };
-                if unsafe{registry_is_alive(user_ptr as *mut UserStruct)} {
+                if unsafe{registry_is_alive(user_ptr as *mut UserStruct) ==1} {
                     self.c_extensions.sync_user_from_rust_db(user_ptr);
                 }
             }
@@ -256,7 +256,7 @@ impl EnhancedStudentDatabase {
             if let Some(u) = user {
                 let ptr: *mut UserStruct = &**u as *const UserStruct as *mut UserStruct;
 
-                if unsafe {registry_is_alive(ptr)} {
+                if unsafe {registry_is_alive(ptr)==1} {
                     if u.is_active == 1 {
                         let _ = self.c_extensions
                             .validate_session(bytes_to_string(&u.session_token).as_str());

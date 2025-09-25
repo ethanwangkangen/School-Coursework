@@ -199,15 +199,15 @@ impl DatabaseExtensions {
         let refs_slice = unsafe { std::slice::from_raw_parts(refs, ref_count as usize) };
         for &user_ptr in refs_slice {
             if !user_ptr.is_null() {
-                //let user = unsafe { Box::from_raw(user_ptr as *mut UserStruct) };
-                let cloned = unsafe { std::ptr::read(user_ptr as *const UserStruct) };
-                //user_refs.push(user);
-                user_refs.push(Box::new(cloned));
+                let user = unsafe { Box::from_raw(user_ptr as *mut UserStruct) };
+             //   let cloned = unsafe { std::ptr::read(user_ptr as *const UserStruct) };
+                user_refs.push(user);
+             //   user_refs.push(Box::new(cloned));
 
                 println!("adding non shared non null user reference");
             }
         }
-        unsafe { libc::free(refs as *mut libc::c_void) };
+        //unsafe { libc::free(refs as *mut libc::c_void) };
 
         user_refs
     }

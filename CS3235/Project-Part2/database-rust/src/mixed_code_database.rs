@@ -170,6 +170,7 @@ impl EnhancedStudentDatabase {
     pub fn login_user(&mut self, user_name: &str, password: &str) -> Result<String, String> {
         if self.find_user_by_name(&self.rust_db, user_name).is_none() {
             // User found in C backend cache
+            println!("Trying to log in C");
             for user_ref in self.user_references.iter_mut() {
                 if str_cmp((*user_ref).username.as_bytes(), user_name) {
                     if self.c_extensions.get_user_password(user_ref.ptr) != password {
@@ -195,17 +196,17 @@ impl EnhancedStudentDatabase {
             let user_password = self.c_extensions.get_user_password(user);
 
             if user_password == password {
+                println!("User {} logged in successfully in C",  user_name);
                 return self.c_extensions.login_user(user_name);
             } else {
                 return Err("Incorrect password".to_string());
             }
-        } else {
+        } else { // User could belong to either db.
             let user = find_user_by_username(&self.rust_db, user_name).unwrap();
             if str_cmp(&user.password, password) {
-                // println!("User[{}] {} logged in successfully", user.user_id, user_name);
                 let session_token = self.c_extensions.create_session(user)?;
                 self.update_user_session_token(user_name, session_token.clone());
-                self.activate_user(user_name);
+                self.activate_user(user_name); // Rust login
                 return Ok(session_token);
             } else {
                 return Err("Incorrect password".to_string());
@@ -240,7 +241,7 @@ impl EnhancedStudentDatabase {
         let all_c_userstructs = self.c_extensions.get_all_user_references();
         // add all users in this vector to rust db
         for user in all_c_userstructs {
-            println!("Adding to rust db, {}", array_to_string(&user.username));
+            println!("Adding C pointrs to rust db, {}", array_to_string(&user.username));
             add_user(&mut self.rust_db, user);
         }
     }
@@ -268,14 +269,22 @@ impl EnhancedStudentDatabase {
 
         // Validate active user sessions
         self.validate_active_user_session();
+
+
+        //self.c_extensions.increment_day(&self.rust_db);
+
         // Update rust database (uses the function you translated for Part 1)
         update_database_daily(&mut self.rust_db);
+
+        self.c_extensions.increment_day(&self.rust_db);
+
+
         // Every 5 days, join the two databases
         if *(self._day_counter) % 1 == 0 {
             self.join_databases();
         }
         // Perform daily updates on C backend
-        self.c_extensions.increment_day(&self.rust_db);
+        //self.c_extensions.increment_day(&self.rust_db);
     }
 
     pub fn print_both_databases(&self) {

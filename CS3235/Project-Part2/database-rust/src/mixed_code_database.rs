@@ -233,6 +233,8 @@ impl EnhancedStudentDatabase {
                     ptr as *mut UserStructT
                 };
                 if unsafe{registry_is_alive(user_ptr as *mut UserStruct) ==1} {
+                    // Added this check to ensure no dereferencing of already-freed pointers.
+
                     self.c_extensions.sync_user_from_rust_db(user_ptr);
                 }
             }
@@ -243,9 +245,10 @@ impl EnhancedStudentDatabase {
         // Get pointer references for C users and extend local references
         let all_c_userstructs = self.c_extensions.get_all_user_references();
         // add all users in this vector to rust db
-        for user in all_c_userstructs {
+        for mut user in all_c_userstructs {
             //println!("Adding C pointers to rust db, {}", array_to_string(&user.username));
             //add_user(&mut self.rust_db, user);
+            user.shared = 1;
             add_user(&mut self.rust_db, user);
         }
     }
@@ -255,7 +258,8 @@ impl EnhancedStudentDatabase {
         for user in self.rust_db.users.iter().take(self.rust_db.count as usize) {
             if let Some(u) = user {
                 let ptr: *mut UserStruct = &**u as *const UserStruct as *mut UserStruct;
-
+                
+                // Again, check that ptr has not already been freed.
                 if unsafe {registry_is_alive(ptr)==1} {
                     if u.is_active == 1 {
                         let _ = self.c_extensions
@@ -272,7 +276,7 @@ impl EnhancedStudentDatabase {
         // Increment the day counter
         *(self._day_counter) += 1;
 
-        // Added: update day counter for C code??
+        // Added: update day counter for C code, to fix bug.
         self.c_extensions.sync_day_to_c(&self._day_counter);
 
         // Validate active user sessions
@@ -284,7 +288,7 @@ impl EnhancedStudentDatabase {
 
 
         // Every 5 days, join the two databases
-        if *(self._day_counter) % 1 == 0 {
+        if *(self._day_counter) % 5 == 0 {
             self.join_databases();
         }
         // Perform daily updates on C backend

@@ -55,11 +55,10 @@ static UserDatabase_t* global_db = NULL;
 int *global_day_counter;
 
 
-//Rust FFI
+//Rust FFI, for pointer registry
 extern void registry_add(UserStruct_t* user);
 extern void registry_remove(UserStruct_t* user);
 extern int registry_is_alive(UserStruct_t* user);
-
 
 
 // Core database functions
@@ -92,6 +91,7 @@ void free_user(UserStruct_t* user) {
     registry_remove(user);
     free(user);
 }
+
 void cleanup_database(UserDatabase_t* db) {
     for (int i = 0; i < db->count; i++) {
         if (db->users[i] ==NULL) continue;
@@ -130,6 +130,7 @@ UserStruct_t* create_user(char* username, char* email, int user_id, char* passwo
     
     user->user_id = user_id;
     user->inactivity_count = 0;
+    user->is_active = 0;
     
     user->shared = 0;
     user->owner = OWNER_C;
@@ -160,6 +161,7 @@ int init_session_manager() {
     global_session_manager->session_count = 0;
     global_session_manager->db_ref = global_db;
     memset(global_session_manager->sessions, 0, sizeof(SessionInfo_t*) * MAX_SESSIONS);
+
     #ifdef DEBUG_EN
     printf("[C-Code] Session manager initialized\n");
     #endif
@@ -221,6 +223,7 @@ int get_non_null_ref_count(UserDatabase_t* db) {
     return count;
 }
 
+// Only return those that have not already been shared
 int get_non_null_nor_shared_ref_count(UserDatabase_t* db) {
     int count = 0;
     for (int i = 0; i < db ->count; i++) {
@@ -312,51 +315,32 @@ SessionInfo_t* find_session_by_token(SessionManager_t* sm, char* token) {
     return NULL;
 }
 
-
+// -1 if no token or no session
+// 1 if expired
+// 0 if valid.
 int validate_user_session(char* token) {
     if (!global_session_manager || !token) {
-        return 0;
+        //printf("no token or no global manager\n");
+        return -1;
     }
     SessionInfo_t *session = find_session_by_token(global_session_manager, token);
     if (!session) {
-        return 0;
+        //printf("no session\n");
+        return -1;
     }
     if (session->session_idle_time > SESSION_MAX_IDLE_TIME) {
-
+        //printf("session too long, expiring\n");
         session->is_active = 0;
         free(session);
         return 1;
     }
-    else session->session_idle_time += 1;
-    return 0;
+        //printf("valid session");
+        session->session_idle_time += 1;
+        return 0;
+    
 }
 
-/*
-int validate_user_session(char* token) {
-    if (!global_session_manager || !token) return 0;
-
-    for (int i = 0; i < global_session_manager->session_count; i++) {
-        SessionInfo_t* session = global_session_manager->sessions[i];
-        if (!session || !session->is_active) continue;
-
-        if (strcmp(session->session_token, token) == 0) {
-            if (session->session_idle_time > SESSION_MAX_IDLE_TIME) {
-                session->is_active = 0;
-                free(session);
-                global_session_manager->sessions[i] = NULL; 
-                return 1; // expired
-            } else {
-                session->session_idle_time += 1;
-                return session->user_id; // still valid
-            }
-        }
-    }
-    return 0;
-}
-
-
-*/
-
+// No need for this anymore. No sharing of duplicates
 void merge_duplicate_handles(UserDatabase_t *db){
     for(int i = (db->count-1); i >= 0; i--){
         for(int j = 0; j < i-1; j++){
@@ -371,14 +355,19 @@ void merge_duplicate_handles(UserDatabase_t *db){
     }
 }
 
+// Only settle removal of users for C owned users and inactivity count.
+// But settle session logic for all. (rules don't say cannot modify rust-owned structs,
+// only can't deallocate. )
 void update_database_daily(UserDatabase_t* db) {
     
     for (int i = 0; i < db->count; i++) {
         if (db->users[i]==NULL) continue;
+        if (!registry_is_alive(db->users[i])) continue;
         if (!db->users[i]->is_active && db->users[i]->inactivity_count > INACTIVITY_THRESHOLD) {
 
             if (db->users[i]->owner == 1) {
                 // don't free but remove the alias
+                // let Rust handle the freeing, as wlel as removal from registry.
                 printf("[C-Code] Removing rust alias for \n");
                 db->users[i] = NULL;
             } else {
@@ -387,17 +376,23 @@ void update_database_daily(UserDatabase_t* db) {
                     printf("[C-Code] Removing user[%d] %s due to inactivity for %d days\n", db->users[i]->user_id, db->users[i]->username, db->users[i]->inactivity_count);
                 #endif
             
+                // free and remove from registry.
                 free_user(db->users[i]);
                 db->users[i] = NULL;
             }
 
         } else {
-           // if (db->users[i]->owner ==1)continue; //need a way to invalidate rust owned
-            if(!validate_user_session(db->users[i]->session_token)) db->users[i]->is_active = 0;
+            // Settle is_active for ALL structs, including Rust owned.
+            // Already checked for live pointers before.
+            if(validate_user_session(db->users[i]->session_token)==1) db->users[i]->is_active = 0;
             #ifdef DEBUG_EN
                 printf("[C-Code] %d is max allowed threshold Incrementing inactivity for user[%d] %s to %d days\n", INACTIVITY_THRESHOLD, db->users[i]->user_id, db->users[i]->username, db->users[i]->inactivity_count + 1);
+                printf("[C-Code] is_active is %d\n", db->users[i]->is_active);
               #endif
-            db->users[i]->inactivity_count++;
+            
+            if (db->users[i]->owner==0) {
+                db->users[i]->inactivity_count++;
+            }
         }
     }
     
@@ -413,7 +408,8 @@ void update_database_daily(UserDatabase_t* db) {
 UserStruct_t* find_user_by_username(UserDatabase_t* db, char* user_name) {
     for (int i = 0; i < db->count; i++) {
         if (db->users[i] == NULL) continue;
-        if (db->users[i]->owner==1) continue;
+        //if (db->users[i]->owner==1) continue;
+        if(!registry_is_alive(db->users[i])) continue;
         if (strcmp(db->users[i]->username, user_name) == 0) {
             return db->users[i];
         }
@@ -444,8 +440,6 @@ char* get_password(UserDatabase_t* db, char* username) {
 }
 
 
-
-
 UserStruct_t* find_user_by_session_token(UserDatabase_t* db, char* session_token) {
     for (int i = 0; i < db->count; i++) {
         if (db->users[i] ==NULL) continue;
@@ -471,7 +465,6 @@ void deactivate_users(UserDatabase_t* rust_db) {
             user->is_active = 0;
         }
         
-       // Need to find another way to deactivate rust user. 
         user = find_user_by_session_token(rust_db, global_session_manager->sessions[i]->session_token);
         
         if (user != NULL) {

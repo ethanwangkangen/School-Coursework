@@ -143,6 +143,7 @@ impl DatabaseExtensions {
             unsafe {
                 // Only sync if pointer not shared already.
                 if (*user).shared == 0 {
+                    println!("Sharing from rust to c");
                     (*user).shared = 1;
                     add_user(self.db, user);
                 }
@@ -162,8 +163,6 @@ impl DatabaseExtensions {
 
             let token = CStr::from_ptr(token_ptr).to_string_lossy().to_string();
 
-            // Free the malloc'ed buffer in C
-
             Ok(token)
         }
     }
@@ -173,7 +172,7 @@ impl DatabaseExtensions {
 
         unsafe {
             let user_id = validate_user_session(c_token.as_ptr());
-            if user_id == 0 {
+            if user_id != 0 { // changed from == to !=
                 Err("Invalid session".to_string())
             } else {
                 Ok(user_id)

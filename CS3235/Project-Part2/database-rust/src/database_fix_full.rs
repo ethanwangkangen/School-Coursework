@@ -10,9 +10,13 @@ const MAX_PASSWORD_LENGTH: usize = 100;
 const INACTIVITY_THRESHOLD: i32 = 5;
 const MAX_SESSION_TOKEN_LEN: usize = 32;
 
+
+// Pointer registry?
+// If pointer is in registry, it means its in use.
+// Remove before freeing.
+// If pointer not in registry, don't access!
 static REGISTRY: LazyLock<Mutex<HashSet<usize>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
-
 
 #[no_mangle]
 pub extern "C" fn registry_add(ptr: *mut UserStruct) {
@@ -25,7 +29,7 @@ pub extern "C" fn registry_add(ptr: *mut UserStruct) {
 #[no_mangle]
 pub extern "C" fn registry_remove(ptr: *mut UserStruct) {
     if let Some(nn) = NonNull::new(ptr) {
-        println!("Removing from registry");
+      //  println!("Removing from registry");
         let mut reg = REGISTRY.lock().unwrap();
         let present = reg.remove(&(nn.as_ptr() as usize));
     }
@@ -92,10 +96,6 @@ use std::cmp::min;
 // Helper function.
 // Takes in a mutable reference to an array, and returns a String
 pub fn array_to_string<const N: usize>(bytes: &[u8; N]) -> String {
-    //match str::from_utf8(bytes) {
-    //    Ok(s) => s.trim_end_matches('\x00').to_string(),
-    //    Err(e) => format!("Error: {}", e),
-    //}
     let len = bytes.iter().position(|&b| b == 0).unwrap_or(N);
     String::from_utf8_lossy(&bytes[..len]).to_string()
 }
@@ -111,7 +111,6 @@ pub fn init_database() -> Box<UserDatabase> {
 }
 
 
-
 pub fn add_user(db: &mut UserDatabase, user: Box<UserStruct>) {
     if (db.count as usize) < MAX_USERS {
         let ptr = Box::into_raw(user);   // take ownership
@@ -119,6 +118,8 @@ pub fn add_user(db: &mut UserDatabase, user: Box<UserStruct>) {
             registry_add(ptr);           // mark as alive
             // rewrap so Rust still manages it
             db.users[db.count as usize] = Some(Box::from_raw(ptr));
+            // this is actually ok even if it's a C pointer? 
+            // just don't set db.users[i] to None unless sure it's ok. Check registry.
         }
         db.count += 1;
     }
@@ -225,7 +226,7 @@ pub fn cleanup_database(db : &mut UserDatabase) {
             // edit registry
             let ptr = Box::into_raw(user);
             unsafe { registry_remove(ptr); }
-            unsafe { Box::from_raw(ptr); } // actually free
+            unsafe { Box::from_raw(ptr); } // to free? necessary?
             db.users[i as usize] = None;
         }
 
@@ -239,21 +240,18 @@ pub fn update_database_daily(db: &mut UserDatabase) {
             // get raw pointer for registry check
             let ptr: *mut UserStruct = &*user as *const UserStruct as *mut UserStruct;
 
-            // Check if alive in registry
             if unsafe { registry_is_alive(ptr)==0 } {
-                // pointer already dead → skip entirely
-                db.users[i as usize] = Some(user);
+                db.users[i as usize] = Some(user); // dead, just put it back
                 continue;
             }
 
-            // Skip C-owned users
             if user.owner == OwnershipType::C {
-                db.users[i as usize] = Some(user);
+                db.users[i as usize] = Some(user); // not owned, just put it back
                 continue;
             }
 
-            // Rust-owned users: either free or increment inactivity
-            if user.inactivity_count > INACTIVITY_THRESHOLD {
+            // Rust-owned users: just free.
+            if user.inactivity_count > INACTIVITY_THRESHOLD && user.is_active==0{
                 println!(
                     "[Rust] Removing user {} for inactivity",
                     array_to_string(&user.username)
@@ -266,16 +264,14 @@ pub fn update_database_daily(db: &mut UserDatabase) {
 
                 db.users[i as usize] = None;
                 //db.count -= 1;
-            } else {
-                println!(
-                    "[Rust] Incrementing inactivity count for {}",
-                    array_to_string(&user.username)
-                );
+            }
+            else {
 
                 let mut user = user;
                 user.inactivity_count += 1;
                 db.users[i as usize] = Some(user);
             }
+
         }
     }
 }
@@ -335,6 +331,10 @@ fn print_user(db : &mut UserDatabase, username : &str) {
 pub fn find_user_by_username<'a>(db : & 'a UserDatabase, username: &'a str) -> Option<&'a UserStruct> {
     for user_option in db.users.iter() {
         if let Some(user) = user_option {
+            let raw_ptr: *mut UserStruct = &**user as *const UserStruct as *mut UserStruct;
+            if registry_is_alive(raw_ptr) ==0 {
+                continue;
+            }
             if std::str::from_utf8(&user.username)
                 .unwrap_or("")
                 .trim_end_matches(char::from(0)) == username
@@ -350,7 +350,9 @@ pub fn find_user_by_username<'a>(db : & 'a UserDatabase, username: &'a str) -> O
 pub fn find_user_by_username_mut<'a>(db: & 'a mut UserDatabase, username: &'a str) -> Option<&'a mut UserStruct> {
     for user_option in db.users.iter_mut() {
         if let Some(user) = user_option{
-        
+            if registry_is_alive(&mut **user) ==0{
+                continue;
+            }
             if std::str::from_utf8(&user.username)
                 .unwrap_or("")
                 .trim_end_matches(char::from(0)) == username
